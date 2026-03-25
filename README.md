@@ -176,6 +176,21 @@ caseWhen("role").eq("ADMIN").then("YES")
 .where("role").eqIf(hasRole, role)    // skipped if condition false
 ```
 
+> **Null-safe**: All operators (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `notIn`, `between`) **silently skip** the clause when value is `null`. No need for manual null checks!
+
+```java
+// Just pass nullable values directly — null ones are ignored
+String status = request.getStatus();     // may be null
+Integer minAmount = request.getMin();    // may be null
+
+ClickHouseQuery.select("*").from("orders")
+    .where("status").eq(status)          // skipped if null
+    .where("amount").gt(minAmount)       // skipped if null
+    .where("tenant_id").eq("op-1")       // always applied
+    .query(namedJdbc, rowMapper);
+// → SELECT * FROM orders WHERE tenant_id = :tenantId
+```
+
 ### 6. LIKE / ILIKE Search
 
 ```java
@@ -274,15 +289,15 @@ ClickHouseQuery.select(
 ### 12. Subquery FROM
 
 ```java
-// Query from a subquery result set
+// Query from a subquery result set (fluent .as() style)
 ClickHouseQuery.select("user_id", "total")
     .from(
         ClickHouseQuery.select("user_id", "sum(amount) AS total")
             .from("orders")
             .where("tenant_id").eq(tenantId)
-            .groupBy("user_id"),
-        "sub"  // alias
+            .groupBy("user_id")
     )
+    .as("sub")
     .where("total").gt(1000)
     .orderBy("total", SortOrder.DESC)
     .limit(10)
