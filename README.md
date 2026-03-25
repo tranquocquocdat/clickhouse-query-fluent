@@ -194,18 +194,25 @@ ClickHouseQuery.select("*").from("orders")
 ### 6. LIKE / ILIKE Search
 
 ```java
-// Case-insensitive (ILIKE)
+// Case-insensitive (ILIKE) — full match (%keyword%)
 ClickHouseQuery.select("*")
     .from("users")
     .whereILike(keyword).on("name", "email")
     // → (name ILIKE '%keyword%' OR email ILIKE '%keyword%')
     .query(namedJdbc, rowMapper);
 
-// Case-sensitive (LIKE)
+// Case-sensitive (LIKE) — full match (%keyword%)
 ClickHouseQuery.select("*")
     .from("users")
     .whereLike(keyword).on("name", "email")
     // → (name LIKE '%keyword%' OR email LIKE '%keyword%')
+    .query(namedJdbc, rowMapper);
+
+// Prefix search (keyword%) — index-friendly 🔥
+ClickHouseQuery.select("*")
+    .from("users")
+    .whereILike(keyword).onPrefix("name", "email")
+    // → (name ILIKE 'keyword%' OR email ILIKE 'keyword%')
     .query(namedJdbc, rowMapper);
 ```
 

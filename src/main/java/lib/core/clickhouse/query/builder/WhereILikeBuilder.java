@@ -21,7 +21,7 @@ public final class WhereILikeBuilder {
 
     /**
      * Apply LIKE/ILIKE search across the given columns (combined with OR).
-     * Skipped when keyword is null or blank.
+     * Uses {@code %keyword%} pattern. Skipped when keyword is null or blank.
      */
     public ClickHouseQuery on(String... columns) {
         if (keyword == null || keyword.isBlank()) return query;
@@ -33,6 +33,24 @@ public final class WhereILikeBuilder {
         }
         query.whereClauses.add(or.toString());
         query.params.addValue(paramName, "%" + keyword.trim() + "%");
+        return query;
+    }
+
+    /**
+     * Apply prefix-only LIKE/ILIKE search across the given columns (combined with OR).
+     * Uses {@code keyword%} pattern — optimized for index prefix matching.
+     * Skipped when keyword is null or blank.
+     */
+    public ClickHouseQuery onPrefix(String... columns) {
+        if (keyword == null || keyword.isBlank()) return query;
+        String operator = caseSensitive ? "LIKE" : "ILIKE";
+        String paramName = caseSensitive ? "_likePrefixKeyword" : "_prefixKeyword";
+        StringJoiner or = new StringJoiner(" OR ", "(", ")");
+        for (String col : columns) {
+            or.add(col + " " + operator + " :" + paramName);
+        }
+        query.whereClauses.add(or.toString());
+        query.params.addValue(paramName, keyword.trim() + "%");
         return query;
     }
 }

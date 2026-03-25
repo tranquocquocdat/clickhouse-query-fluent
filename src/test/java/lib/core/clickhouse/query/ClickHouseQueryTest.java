@@ -402,6 +402,44 @@ class ClickHouseQueryTest {
         }
 
         @Test
+        @DisplayName("whereILike(kw).onPrefix(cols) generates prefix ILIKE (keyword%)")
+        void whereILike_prefix() {
+            ClickHouseQuery q = ClickHouseQuery
+                    .select("*")
+                    .from("users")
+                    .whereILike("john").onPrefix("name", "email");
+
+            String sql = q.toSql();
+            assertTrue(sql.contains("name ILIKE :_prefixKeyword"));
+            assertTrue(sql.contains("email ILIKE :_prefixKeyword"));
+            assertEquals("john%", q.toParams().getValue("_prefixKeyword"));
+        }
+
+        @Test
+        @DisplayName("whereLike(kw).onPrefix(cols) generates prefix LIKE (keyword%)")
+        void whereLike_prefix() {
+            ClickHouseQuery q = ClickHouseQuery
+                    .select("*")
+                    .from("users")
+                    .whereLike("TXN-").onPrefix("transaction_id");
+
+            String sql = q.toSql();
+            assertTrue(sql.contains("transaction_id LIKE :_likePrefixKeyword"));
+            assertEquals("TXN-%", q.toParams().getValue("_likePrefixKeyword"));
+        }
+
+        @Test
+        @DisplayName("whereILike(null).onPrefix(cols) is skipped")
+        void whereILike_prefix_null() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereILike(null).onPrefix("name")
+                    .toSql();
+
+            assertFalse(sql.contains("ILIKE"));
+        }
+
+        @Test
         @DisplayName("whereOr generates OR group")
         void whereOr() {
             ClickHouseQuery q = ClickHouseQuery
