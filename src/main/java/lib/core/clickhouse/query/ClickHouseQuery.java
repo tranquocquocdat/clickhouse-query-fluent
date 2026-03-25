@@ -3,6 +3,7 @@ package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.CH;
 import lib.core.clickhouse.query.builder.*;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -636,6 +637,54 @@ public final class ClickHouseQuery {
     }
 
     /**
+     * Execute query and auto-map results to a DTO class.
+     * Uses {@link BeanPropertyRowMapper} to map {@code snake_case} columns to {@code camelCase} fields.
+     *
+     * <pre>{@code
+     * List<OrderReport> reports = ClickHouseQuery.select("user_id", "sum(amount) AS total_amount")
+     *     .from("orders")
+     *     .where("tenant_id").eq(tenantId)
+     *     .groupBy("user_id")
+     *     .query(namedJdbc, OrderReport.class);
+     *
+     * // OrderReport.java — just needs matching field names
+     * public class OrderReport {
+     *     private String userId;      // ← maps from user_id
+     *     private BigDecimal totalAmount; // ← maps from total_amount
+     *     // getters + setters
+     * }
+     * }</pre>
+     *
+     * @param jdbc the JDBC template
+     * @param type the DTO class (must have default constructor + setters)
+     * @param <T>  the DTO type
+     * @return list of mapped DTOs
+     */
+    public <T> List<T> query(NamedParameterJdbcTemplate jdbc, Class<T> type) {
+        return query(jdbc, BeanPropertyRowMapper.newInstance(type));
+    }
+
+    /**
+     * Execute query and return a single DTO result (or null).
+     *
+     * <pre>{@code
+     * OrderSummary summary = ClickHouseQuery.select("count(*) AS total_orders", "sum(amount) AS total_amount")
+     *     .from("orders")
+     *     .where("tenant_id").eq(tenantId)
+     *     .queryOne(namedJdbc, OrderSummary.class);
+     * }</pre>
+     *
+     * @param jdbc the JDBC template
+     * @param type the DTO class
+     * @param <T>  the DTO type
+     * @return the mapped DTO, or null if no result
+     */
+    public <T> T queryOne(NamedParameterJdbcTemplate jdbc, Class<T> type) {
+        List<T> results = query(jdbc, type);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    /**
      * Execute a <b>single query</b> that returns both paginated data and total count.
      * Internally appends {@code count(*) OVER() AS _total} to the SELECT, so no second query is needed.
      *
@@ -683,6 +732,28 @@ public final class ClickHouseQuery {
         this.selectColumns.remove(this.selectColumns.size() - 1);
 
         return new Page<>(data, totalHolder[0], page, pageSize);
+    }
+
+    /**
+     * Single-query pagination with auto DTO mapping.
+     *
+     * <pre>{@code
+     * Page<OrderReport> page = ClickHouseQuery.select("user_id", "sum(amount) AS total_amount")
+     *     .from("orders")
+     *     .where("tenant_id").eq(tenantId)
+     *     .groupBy("user_id")
+     *     .queryPage(0, 10, namedJdbc, OrderReport.class);
+     * }</pre>
+     *
+     * @param page     the page index (0-based)
+     * @param pageSize number of rows per page
+     * @param jdbc     the JDBC template
+     * @param type     the DTO class
+     * @param <T>      the DTO type
+     * @return a {@link Page} containing auto-mapped DTOs + total count
+     */
+    public <T> Page<T> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, Class<T> type) {
+        return queryPage(page, pageSize, jdbc, BeanPropertyRowMapper.newInstance(type));
     }
 
     /** Execute query and return a single typed value. */
