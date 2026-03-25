@@ -703,33 +703,94 @@ List<Order> orders = ClickHouseQuery.select("user_id", "amount")
 
 ### 19. Fluent OR Conditions (`whereOr`)
 
-Build complex OR groups with the **same fluent operators** as WHERE:
+Build complex OR groups with the **same fluent operators** as `where()`.
 
-```java
-// Fluent OR — eq, ne, gt, gte, lt, lte, in, isNull, ilike, like, subquery
-ClickHouseQuery.select("*")
-    .from("orders")
-    .where("tenant_id").eq(tenantId)     // AND
-    .whereOr(or -> or                     // AND (
-        .where("status").eq("ACTIVE")     //   status = 'ACTIVE'
-        .where("status").eq("PENDING")    //   OR status = 'PENDING'
-    )                                     // )
-    .query(namedJdbc, Order.class);
-// → WHERE tenant_id = :tenantId AND (status = :_or0 OR status = :_or1)
+**Rule:**
+- `.where()` + `.where()` → **AND**
+- `.whereOr()` bên trong → **OR**
+- `.whereOr()` nối với bên ngoài → **AND**
 
-// Complex OR with multiple operators
-.whereOr(or -> or
-    .where("amount").gt(1000)                     // amount > 1000
-    .where("type").in(List.of("VIP", "PREMIUM"))   // OR type IN ('VIP','PREMIUM')
-    .where("name").ilike("john")                   // OR name ILIKE '%john%'
-    .where("deleted_at").isNull()                  // OR deleted_at IS NULL
-    .where("user_id").in(                          // OR user_id IN (subquery)
-        ClickHouseQuery.select("id").from("vip_users")
-    )
-)
+```
+WHERE  ①  AND  ②  AND  (③a OR ③b)  AND  (④a OR ④b)
+       ↑        ↑       └ whereOr ┘      └ whereOr ┘
+     where    where     bên trong OR    bên trong OR
+
+└────────── bên ngoài: luôn AND ──────────────────┘
 ```
 
-**Supported operators inside `whereOr`:**
+#### Basic example
+
+```java
+List<Order> orders = ClickHouseQuery.select("*")
+    .from("orders")
+    .where("tenant_id").eq(tenantId)          // AND
+    .whereOr(or -> or                          // AND (
+        .where("status").eq("ACTIVE")          //   status = 'ACTIVE'
+        .where("status").eq("PENDING")         //   OR status = 'PENDING'
+    )                                          // )
+    .query(namedJdbc, Order.class);
+
+// SQL: WHERE tenant_id = :tenantId
+//        AND (status = :_or0 OR status = :_or1)
+```
+
+#### Complex real-world example
+
+```java
+// Báo cáo đơn hàng: lọc theo tenant, trạng thái phức tạp, và điều kiện VIP
+Alias orders = Alias.of("orders");
+Alias users  = Alias.of("users");
+
+Page<OrderReport> page = ClickHouseQuery.select(
+        users.col("name"),
+        orders.sum("amount").as("total_revenue").toString(),
+        count().as("order_count").toString()
+    )
+    .from(orders)
+    .join(users).on(users.c("id"), orders.c("user_id"))
+
+    // ── AND conditions ──
+    .where(orders.c("tenant_id")).eq(tenantId)
+    .where(orders.c("created_at")).gte(startDate)
+    .where(orders.c("created_at")).lte(endDate)
+
+    // ── OR group 1: trạng thái đơn hàng ──
+    .whereOr(or -> or
+        .where(orders.c("status")).eq("COMPLETED")
+        .where(orders.c("status")).eq("PROCESSING")
+        .where(orders.c("status")).eq("SHIPPING")
+    )
+
+    // ── OR group 2: khách VIP hoặc đơn lớn ──
+    .whereOr(or -> or
+        .where(users.c("type")).in(List.of("VIP", "PREMIUM"))
+        .where(orders.c("amount")).gt(5000)
+        .where(users.c("id")).in(
+            ClickHouseQuery.select("user_id")
+                .from("referral_codes")
+                .where("active").eq(1)
+        )
+    )
+
+    .groupBy(users.c("name"))
+    .orderBy("total_revenue", SortOrder.DESC)
+    .queryPage(0, 20, namedJdbc, OrderReport.class);
+
+// SQL:
+// SELECT users.name, sum(orders.amount) AS total_revenue, count(*) AS order_count
+// FROM orders
+// JOIN users ON users.id = orders.user_id
+// WHERE orders.tenant_id = :orders.tenantId
+//   AND orders.created_at >= :orders.createdAtGte
+//   AND orders.created_at <= :orders.createdAtLte
+//   AND (orders.status = :_or0 OR orders.status = :_or1 OR orders.status = :_or2)
+//   AND (users.type IN (:_or0, :_or1) OR orders.amount > :_or2 OR users.id IN (SELECT ...))
+// GROUP BY users.name
+// ORDER BY total_revenue DESC
+// LIMIT 20 OFFSET 0
+```
+
+#### Supported operators inside `whereOr`
 
 | Operator | Example | SQL |
 |---|---|---|
@@ -748,3 +809,4 @@ ClickHouseQuery.select("*")
 | `in(subQuery)` | `.where("id").in(subQuery)` | `id IN (SELECT ...)` |
 
 > **Null-safe:** All operators inside `whereOr` skip the condition when value is `null` — same behavior as regular `where()`.
+> Legacy API `add()` and `addRaw()` still work for backward compatibility.
