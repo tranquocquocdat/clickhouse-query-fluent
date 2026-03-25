@@ -714,6 +714,14 @@ public final class ClickHouseQuery {
             return query;
         }
 
+        /** {@code expression != value} */
+        public ClickHouseQuery ne(Object value) {
+            String p = nextParam();
+            query.havingClauses.add(expression + " != :" + p);
+            query.params.addValue(p, value);
+            return query;
+        }
+
         /** {@code expression >= from AND expression <= to} */
         public ClickHouseQuery between(Object from, Object to) {
             String p1 = nextParam();

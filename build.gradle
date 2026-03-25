@@ -1,3 +1,4 @@
+plugins { id 'jacoco' }
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -24,6 +25,7 @@ dependencies {
 
     // Testing
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -61,3 +63,5 @@ publishing {
         }
     }
 }
+jacoco { toolVersion = '0.8.11' }
+jacocoTestReport { reports { csv.required = true } }

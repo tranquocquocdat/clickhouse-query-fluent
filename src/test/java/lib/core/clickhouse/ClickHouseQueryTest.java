@@ -7,7 +7,12 @@ import org.junit.jupiter.api.Nested;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link ClickHouseQuery} fluent builder.
@@ -433,6 +438,64 @@ class ClickHouseQueryTest {
 
             assertTrue(sql.contains("HAVING count(*) >= :"));
         }
+
+        @Test
+        @DisplayName("HAVING supports all operators")
+        void havingOperators() {
+            ClickHouseQuery q = ClickHouseQuery.select("x").from("t").groupBy("x");
+            q.having("a").eq(1);
+            q.having("b").ne(2);
+            q.having("c").lt(3);
+            q.having("d").lte(4);
+            q.having("e").between(5, 6);
+            
+            String sql = q.toSql();
+            assertTrue(sql.contains("HAVING a = :"));
+            assertTrue(sql.contains("AND b != :"));
+            assertTrue(sql.contains("AND c < :"));
+            assertTrue(sql.contains("AND d <= :"));
+            assertTrue(sql.contains("AND e >= :") && sql.contains("AND e <= :"));
+        }
+    }
+
+    // ── Execute Tests ───────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Execution Tests")
+    class ExecutionTests {
+
+        @Test
+        @DisplayName("query() executes namedJdbc.query")
+        @SuppressWarnings("unchecked")
+        void query() {
+            NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+            RowMapper<String> mapper = mock(RowMapper.class);
+            List<String> expected = List.of("A");
+            when(jdbc.query(anyString(), any(SqlParameterSource.class), eq(mapper))).thenReturn(expected);
+
+            List<String> result = ClickHouseQuery.select("*").from("t").query(jdbc, mapper);
+            assertEquals(expected, result);
+        }
+
+        @Test
+        @DisplayName("queryForObject() executes namedJdbc.queryForObject")
+        void queryForObject() {
+            NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+            when(jdbc.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class))).thenReturn(10L);
+
+            Long result = ClickHouseQuery.select("count(*)").from("t").queryForObject(jdbc, Long.class);
+            assertEquals(10L, result);
+        }
+
+        @Test
+        @DisplayName("count() executes count subquery")
+        void count() {
+            NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+            when(jdbc.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class))).thenReturn(5L);
+
+            long result = ClickHouseQuery.select("*").from("t").count(jdbc);
+            assertEquals(5L, result);
+        }
     }
 
     // ── ORDER BY / LIMIT ────────────────────────────────────────────────
@@ -812,6 +875,16 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("order_status = :orderStatus"));
             assertTrue(sql.contains("ILIKE :_keyword"));
             assertTrue(sql.contains("GROUP BY user_id, order_id, order_status"));
+        }
+
+        @Test
+        @DisplayName("CountQuery execute triggers JDBC queryForObject")
+        void countExecute() {
+            NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+            when(jdbc.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class))).thenReturn(99L);
+
+            long result = ClickHouseQuery.count(ClickHouseQuery.select("*").from("t")).execute(jdbc);
+            assertEquals(99L, result);
         }
     }
 
