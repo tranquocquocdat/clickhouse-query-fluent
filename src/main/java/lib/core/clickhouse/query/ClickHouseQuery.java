@@ -83,6 +83,9 @@ public final class ClickHouseQuery {
 
     private Phase currentPhase = Phase.SELECT;
 
+    /** Default LIMIT applied when query() is called without an explicit limit. */
+    public static final int DEFAULT_LIMIT = 1000;
+
     // Public fields — accessed by builder classes in query.builder sub-package
     public final List<String> selectColumns = new ArrayList<>();
     public boolean distinct;
@@ -620,8 +623,15 @@ public final class ClickHouseQuery {
 
     // ── Execute ──────────────────────────────────────────────────────────
 
-    /** Execute query and return list of mapped results. */
+    /**
+     * Execute query and return list of mapped results.
+     * <p>If no LIMIT was set, a default limit of {@value #DEFAULT_LIMIT} is applied
+     * to prevent accidental full-table scans on large tables.
+     */
     public <T> List<T> query(NamedParameterJdbcTemplate jdbc, RowMapper<T> rowMapper) {
+        if (limitVal == null && unionQueries.isEmpty()) {
+            this.limitVal = DEFAULT_LIMIT;
+        }
         return jdbc.query(toSql(), params, rowMapper);
     }
 
