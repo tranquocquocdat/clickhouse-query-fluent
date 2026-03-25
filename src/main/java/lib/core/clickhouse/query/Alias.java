@@ -6,17 +6,22 @@ import lib.core.clickhouse.expression.CH;
  * Type-safe table alias for avoiding hard-coded prefix strings.
  *
  * <pre>{@code
+ * // Simple — table name is the prefix
+ * Alias orders = Alias.of("orders");
+ * Alias users  = Alias.of("users");
+ *
+ * ClickHouseQuery.select(users.col("name"), orders.sum("amount").as("total"))
+ *     .from(orders)                                       // FROM orders
+ *     .join(users).on(users.c("id"), orders.c("user_id")) // JOIN users ON ...
+ *     .where(orders.c("tenant_id")).eq(tenantId)
+ *
+ * // Short alias — when you want o.amount instead of orders.amount
  * Alias o = Alias.of("orders", "o");
  * Alias u = Alias.of("users", "u");
  *
- * ClickHouseQuery.select(
- *         u.col("name"),
- *         o.sum("amount").as("total_revenue")
- *     )
- *     .from(o)                                     // FROM orders o
- *     .join(u).on(u.c("id"), o.c("user_id"))       // JOIN users u ON ...
- *     .where(o.c("tenant_id")).eq(tenantId)
- *     .query(namedJdbc, rowMapper);
+ * ClickHouseQuery.select(u.col("name"), o.sum("amount").as("total"))
+ *     .from(o)                                    // FROM orders o
+ *     .join(u).on(u.c("id"), o.c("user_id"))      // JOIN users u ON ...
  * }</pre>
  */
 public final class Alias {
@@ -30,7 +35,8 @@ public final class Alias {
     }
 
     /**
-     * Create an Alias with table name + short alias.
+     * Create an Alias with a custom short alias.
+     * {@code Alias.of("orders", "o")} → {@code o.c("amount")} = {@code "o.amount"}
      *
      * @param table the table name (e.g. {@code "orders"})
      * @param alias the short alias (e.g. {@code "o"})
@@ -41,24 +47,25 @@ public final class Alias {
     }
 
     /**
-     * Create an alias-only reference (no table name).
-     * Use this when you only need column prefixing (e.g. for subquery aliases).
+     * Create an Alias using the table name as the prefix.
+     * {@code Alias.of("orders")} → {@code orders.c("amount")} = {@code "orders.amount"}
      *
-     * @param alias the alias name (e.g. {@code "sub"})
+     * @param table the table name (e.g. {@code "orders"})
      * @return a reusable Alias instance
      */
-    public static Alias of(String alias) {
-        return new Alias(null, alias);
+    public static Alias of(String table) {
+        return new Alias(table, table);
     }
 
     /**
-     * Returns {@code "tableName alias"} for FROM/JOIN clauses.
-     * If no table was set (alias-only), returns just the alias.
-     *
-     * @return the table reference string
+     * Returns the table reference for FROM/JOIN clauses.
+     * <ul>
+     *   <li>{@code Alias.of("orders")} → {@code "orders"}</li>
+     *   <li>{@code Alias.of("orders", "o")} → {@code "orders o"}</li>
+     * </ul>
      */
     public String ref() {
-        return table != null ? table + " " + alias : alias;
+        return table.equals(alias) ? table : table + " " + alias;
     }
 
     /**

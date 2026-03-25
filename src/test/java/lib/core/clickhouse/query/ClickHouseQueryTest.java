@@ -1491,10 +1491,12 @@ class ClickHouseQueryTest {
         }
 
         @Test
-        @DisplayName("Alias.of(alias) — ref() returns just alias (no table)")
-        void aliasOnlyRef() {
-            Alias sub = Alias.of("sub");
-            assertEquals("sub", sub.ref());
+        @DisplayName("Alias.of(table) — uses table name as prefix, ref() returns just table")
+        void aliasSimple() {
+            Alias orders = Alias.of("orders");
+            assertEquals("orders", orders.ref());
+            assertEquals("orders.amount", orders.c("amount"));
+            assertEquals("orders", orders.toString());
         }
 
         @Test
@@ -1556,10 +1558,31 @@ class ClickHouseQueryTest {
         }
 
         @Test
+        @DisplayName("Full query with simple Alias.of(table) — no short alias needed")
+        void fullQueryWithSimpleAlias() {
+            Alias orders = Alias.of("orders");
+            Alias users = Alias.of("users");
+
+            String sql = ClickHouseQuery.select(
+                        users.col("name"),
+                        orders.sum("amount").as("total").toString()
+                    )
+                    .from(orders)
+                    .join(users).on(users.c("id"), orders.c("user_id"))
+                    .where(orders.c("status")).eq("ACTIVE")
+                    .toSql();
+
+            assertTrue(sql.contains("FROM orders"));
+            assertFalse(sql.contains("FROM orders orders"));  // no duplicate
+            assertTrue(sql.contains("JOIN users ON users.id = orders.user_id"));
+            assertTrue(sql.contains("orders.status"));
+        }
+
+        @Test
         @DisplayName("Alias.toString() returns alias prefix only")
         void aliasToString() {
             assertEquals("o", Alias.of("orders", "o").toString());
-            assertEquals("sub", Alias.of("sub").toString());
+            assertEquals("orders", Alias.of("orders").toString());
         }
     }
 
