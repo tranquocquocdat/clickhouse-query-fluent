@@ -20,8 +20,9 @@ public final class WhereBuilder {
         this.column = column;
     }
 
-    /** {@code column = :param} — always applied. */
+    /** {@code column = :param} — skipped when value is null. */
     public ClickHouseQuery eq(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column);
         query.whereClauses.add(column + " = :" + paramName);
         query.params.addValue(paramName, value);
@@ -48,40 +49,45 @@ public final class WhereBuilder {
         return query;
     }
 
-    /** {@code column != :param} */
+    /** {@code column != :param} — skipped when value is null. */
     public ClickHouseQuery ne(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column) + "Ne";
         query.whereClauses.add(column + " != :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column > :param} */
+    /** {@code column > :param} — skipped when value is null. */
     public ClickHouseQuery gt(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column) + "Gt";
         query.whereClauses.add(column + " > :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column >= :param} */
+    /** {@code column >= :param} — skipped when value is null. */
     public ClickHouseQuery gte(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column) + "Gte";
         query.whereClauses.add(column + " >= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column < :param} */
+    /** {@code column < :param} — skipped when value is null. */
     public ClickHouseQuery lt(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column) + "Lt";
         query.whereClauses.add(column + " < :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column <= :param} */
+    /** {@code column <= :param} — skipped when value is null. */
     public ClickHouseQuery lte(Object value) {
+        if (value == null) return query;
         String paramName = ClickHouseQuery.toCamelCase(column) + "Lte";
         query.whereClauses.add(column + " <= :" + paramName);
         query.params.addValue(paramName, value);

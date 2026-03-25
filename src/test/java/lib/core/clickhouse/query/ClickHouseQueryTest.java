@@ -197,6 +197,37 @@ class ClickHouseQueryTest {
         }
 
         @Test
+        @DisplayName("null value in eq/ne/gt/gte/lt/lte is silently skipped")
+        void whereNullSkipped() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .where("col1").eq(null)
+                    .where("col2").ne(null)
+                    .where("col3").gt(null)
+                    .where("col4").gte(null)
+                    .where("col5").lt(null)
+                    .where("col6").lte(null)
+                    .toSql();
+
+            assertFalse(sql.contains("WHERE"), "No WHERE clause when all values are null");
+        }
+
+        @Test
+        @DisplayName("null values mixed with non-null — only non-null applied")
+        void whereNullMixed() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .where("status").eq(null)        // skipped
+                    .where("amount").gt(100)          // applied
+                    .where("category").eq(null)       // skipped
+                    .toSql();
+
+            assertFalse(sql.contains("status"));
+            assertFalse(sql.contains("category"));
+            assertTrue(sql.contains("amount > :amountGt"));
+        }
+
+        @Test
         @DisplayName("where(col).in with empty list is skipped")
         void whereIn_empty() {
             String sql = ClickHouseQuery
