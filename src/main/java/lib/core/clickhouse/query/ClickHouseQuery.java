@@ -83,7 +83,7 @@ public final class ClickHouseQuery {
 
     private Phase currentPhase = Phase.SELECT;
 
-    // Package-private fields — accessed by builder classes in the same package
+    // Public fields — accessed by builder classes in query.builder sub-package
     public final List<String> selectColumns = new ArrayList<>();
     public boolean distinct;
     public String tableName;
@@ -95,6 +95,16 @@ public final class ClickHouseQuery {
     public final List<String> orderByClauses = new ArrayList<>();
     public Integer limitVal;
     public Long offsetVal;
+
+    // Subquery FROM
+    private ClickHouseQuery fromSubQuery;
+    private String fromSubQueryAlias;
+
+    // UNION ALL
+    public final List<ClickHouseQuery> unionQueries = new ArrayList<>();
+
+    // WITH (CTE)
+    public final List<String[]> cteList = new ArrayList<>();
 
     private ClickHouseQuery() {}
 
@@ -144,6 +154,33 @@ public final class ClickHouseQuery {
         return new ClickHouseQuery();
     }
 
+    // ── WITH (CTE) ───────────────────────────────────────────────────────
+
+    /**
+     * Start building a query with a Common Table Expression (CTE).
+     *
+     * <pre>{@code
+     * ClickHouseQuery
+     *     .with("active_users",
+     *         ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+     *     .with("user_orders",
+     *         ClickHouseQuery.select("user_id", "sum(amount) AS total")
+     *             .from("orders").groupBy("user_id"))
+     *     .select("au.user_id", "uo.total")
+     *     .from("active_users au")
+     *     .join("user_orders uo").on("uo.user_id", "au.user_id")
+     * }</pre>
+     *
+     * @param name  the CTE name
+     * @param query the CTE query
+     * @return a {@link CTEBuilder} for chaining more CTEs or starting SELECT
+     */
+    public static CTEBuilder with(String name, ClickHouseQuery query) {
+        CTEBuilder builder = new CTEBuilder();
+        builder.addCTE(name, query);
+        return builder;
+    }
+
     // ── FROM ─────────────────────────────────────────────────────────────
 
     /**
@@ -156,6 +193,30 @@ public final class ClickHouseQuery {
     public ClickHouseQuery from(String table) {
         advanceTo(Phase.FROM);
         this.tableName = table;
+        return this;
+    }
+
+    /**
+     * FROM subquery: {@code FROM (SELECT ...) AS alias}.
+     *
+     * <pre>{@code
+     * ClickHouseQuery.select("user_id", "total")
+     *     .from(
+     *         ClickHouseQuery.select("user_id", "sum(amount) AS total")
+     *             .from("orders").groupBy("user_id"),
+     *         "sub"
+     *     )
+     *     .where("total").gt(1000)
+     * }</pre>
+     *
+     * @param subQuery the inner query
+     * @param alias    alias for the subquery table
+     * @return this query builder
+     */
+    public ClickHouseQuery from(ClickHouseQuery subQuery, String alias) {
+        advanceTo(Phase.FROM);
+        this.fromSubQuery = subQuery;
+        this.fromSubQueryAlias = alias;
         return this;
     }
 
@@ -350,6 +411,30 @@ public final class ClickHouseQuery {
         return orderBy(column, SortOrder.ASC);
     }
 
+    // ── UNION ALL ────────────────────────────────────────────────────────
+
+    /**
+     * Append a UNION ALL query.
+     * Can be chained multiple times for 3+ unions.
+     * ORDER BY and LIMIT after UNION ALL apply to the combined result.
+     *
+     * <pre>{@code
+     * ClickHouseQuery.select("user_id", "amount").from("orders_2024")
+     *     .unionAll(
+     *         ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+     *     )
+     *     .orderBy("amount", SortOrder.DESC)
+     *     .limit(10)
+     * }</pre>
+     *
+     * @param other the query to UNION ALL with
+     * @return this query builder
+     */
+    public ClickHouseQuery unionAll(ClickHouseQuery other) {
+        this.unionQueries.add(other);
+        return this;
+    }
+
     // ── LIMIT / OFFSET ──────────────────────────────────────────────────
 
     /**
@@ -390,6 +475,17 @@ public final class ClickHouseQuery {
     public String toSql() {
         StringBuilder sql = new StringBuilder();
 
+        // WITH (CTE)
+        if (!cteList.isEmpty()) {
+            sql.append("WITH ");
+            for (int i = 0; i < cteList.size(); i++) {
+                if (i > 0) sql.append(",\n     ");
+                String[] cte = cteList.get(i);
+                sql.append(cte[0]).append(" AS (\n  ").append(cte[1]).append("\n)");
+            }
+            sql.append("\n");
+        }
+
         // SELECT
         if (!selectColumns.isEmpty()) {
             sql.append(distinct ? "SELECT DISTINCT " : "SELECT ");
@@ -397,7 +493,12 @@ public final class ClickHouseQuery {
         }
 
         // FROM
-        if (tableName != null) {
+        if (fromSubQuery != null) {
+            // Subquery FROM
+            sql.append("\nFROM (\n  ").append(fromSubQuery.toSql()).append("\n) AS ").append(fromSubQueryAlias);
+            // Merge subquery params
+            fromSubQuery.params.getValues().forEach((k, v) -> params.addValue((String) k, v));
+        } else if (tableName != null) {
             sql.append("\nFROM ").append(tableName);
         }
 
@@ -425,6 +526,13 @@ public final class ClickHouseQuery {
             for (int i = 1; i < havingClauses.size(); i++) {
                 sql.append("\n  AND ").append(havingClauses.get(i));
             }
+        }
+
+        // UNION ALL
+        for (ClickHouseQuery union : unionQueries) {
+            sql.append("\nUNION ALL\n").append(union.toSql());
+            // Merge union params
+            union.params.getValues().forEach((k, v) -> params.addValue((String) k, v));
         }
 
         // ORDER BY

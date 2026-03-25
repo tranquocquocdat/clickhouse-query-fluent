@@ -72,6 +72,26 @@ public final class CH {
         return new Expr("sumIf(" + column + ", " + condition + ")");
     }
 
+    /** {@code countIf(column, condition)} */
+    public static Expr countIf(String column, String condition) {
+        return new Expr("countIf(" + column + ", " + condition + ")");
+    }
+
+    /** {@code minIf(column, condition)} */
+    public static Expr minIf(String column, String condition) {
+        return new Expr("minIf(" + column + ", " + condition + ")");
+    }
+
+    /** {@code maxIf(column, condition)} */
+    public static Expr maxIf(String column, String condition) {
+        return new Expr("maxIf(" + column + ", " + condition + ")");
+    }
+
+    /** {@code avgIf(column, condition)} */
+    public static Expr avgIf(String column, String condition) {
+        return new Expr("avgIf(" + column + ", " + condition + ")");
+    }
+
     /** {@code min(column)} */
     public static Expr min(String column) {
         return new Expr("min(" + column + ")");

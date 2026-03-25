@@ -1062,4 +1062,217 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("ORDER BY total DESC"));
         }
     }
+
+    // ── Subquery FROM ──────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Subquery FROM")
+    class SubqueryFromTests {
+
+        @Test
+        @DisplayName("Basic subquery FROM")
+        void basicSubqueryFrom() {
+            String sql = ClickHouseQuery
+                    .select("user_id", "total")
+                    .from(
+                            ClickHouseQuery.select("user_id", "sum(amount) AS total")
+                                    .from("orders")
+                                    .groupBy("user_id"),
+                            "sub"
+                    )
+                    .toSql();
+
+            assertTrue(sql.contains("FROM ("));
+            assertTrue(sql.contains("SELECT user_id"));
+            assertTrue(sql.contains("sum(amount) AS total"));
+            assertTrue(sql.contains("GROUP BY user_id"));
+            assertTrue(sql.contains(") AS sub"));
+        }
+
+        @Test
+        @DisplayName("Subquery FROM with WHERE on outer query")
+        void subqueryFromWithWhere() {
+            ClickHouseQuery q = ClickHouseQuery
+                    .select("user_id", "total")
+                    .from(
+                            ClickHouseQuery.select("user_id", "sum(amount) AS total")
+                                    .from("orders")
+                                    .where("tenant_id").eq("op-1")
+                                    .groupBy("user_id"),
+                            "sub"
+                    )
+                    .where("total").gt(1000);
+
+            String sql = q.toSql();
+            assertTrue(sql.contains("FROM ("));
+            assertTrue(sql.contains(") AS sub"));
+            assertTrue(sql.contains("total > :totalGt"));
+            // Subquery params are merged
+            assertEquals("op-1", q.toParams().getValue("tenantId"));
+            assertEquals(1000, q.toParams().getValue("totalGt"));
+        }
+
+        @Test
+        @DisplayName("Subquery FROM with ORDER BY and LIMIT")
+        void subqueryFromWithOrderByLimit() {
+            String sql = ClickHouseQuery
+                    .select("*")
+                    .from(
+                            ClickHouseQuery.select("user_id", "count(*) AS cnt")
+                                    .from("orders")
+                                    .groupBy("user_id"),
+                            "ranked"
+                    )
+                    .orderBy("cnt", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains(") AS ranked"));
+            assertTrue(sql.contains("ORDER BY cnt DESC"));
+            assertTrue(sql.contains("LIMIT :_limit"));
+        }
+    }
+
+    // ── UNION ALL ───────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("UNION ALL")
+    class UnionAllTests {
+
+        @Test
+        @DisplayName("Basic UNION ALL with two queries")
+        void basicUnionAll() {
+            String sql = ClickHouseQuery
+                    .select("user_id", "amount")
+                    .from("orders_2024")
+                    .unionAll(
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+                    )
+                    .toSql();
+
+            assertTrue(sql.contains("FROM orders_2024"));
+            assertTrue(sql.contains("UNION ALL"));
+            assertTrue(sql.contains("FROM orders_2025"));
+        }
+
+        @Test
+        @DisplayName("UNION ALL with three queries")
+        void tripleUnionAll() {
+            String sql = ClickHouseQuery
+                    .select("user_id", "amount").from("orders_2023")
+                    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2024"))
+                    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
+                    .toSql();
+
+            String[] parts = sql.split("UNION ALL");
+            assertEquals(3, parts.length, "Should have 3 parts separated by UNION ALL");
+        }
+
+        @Test
+        @DisplayName("UNION ALL with ORDER BY and LIMIT on combined result")
+        void unionAllWithOrderByLimit() {
+            String sql = ClickHouseQuery
+                    .select("user_id", "amount").from("orders_2024")
+                    .unionAll(
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+                    )
+                    .orderBy("amount", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains("UNION ALL"));
+            assertTrue(sql.contains("ORDER BY amount DESC"));
+            assertTrue(sql.contains("LIMIT :_limit"));
+        }
+
+        @Test
+        @DisplayName("UNION ALL merges params from both queries")
+        void unionAllMergesParams() {
+            ClickHouseQuery q = ClickHouseQuery
+                    .select("user_id", "amount").from("orders_2024")
+                    .where("tenant_id").eq("op-1")
+                    .unionAll(
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+                                    .where("status").eq("ACTIVE")
+                    );
+
+            q.toSql(); // trigger param merge
+            assertEquals("op-1", q.toParams().getValue("tenantId"));
+            assertEquals("ACTIVE", q.toParams().getValue("status"));
+        }
+    }
+
+    // ── WITH (CTE) ─────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("WITH (CTE)")
+    class CTETests {
+
+        @Test
+        @DisplayName("Single CTE")
+        void singleCTE() {
+            String sql = ClickHouseQuery
+                    .with("active_users",
+                            ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+                    .select("au.user_id", "count(*) AS order_count")
+                    .from("orders o")
+                    .join("active_users au").on("au.user_id", "o.user_id")
+                    .groupBy("au.user_id")
+                    .toSql();
+
+            assertTrue(sql.startsWith("WITH active_users AS ("));
+            assertTrue(sql.contains("status = :status"));
+            assertTrue(sql.contains("SELECT au.user_id"));
+            assertTrue(sql.contains("JOIN active_users au ON au.user_id = o.user_id"));
+        }
+
+        @Test
+        @DisplayName("Multiple CTEs")
+        void multipleCTEs() {
+            String sql = ClickHouseQuery
+                    .with("cte1", ClickHouseQuery.select("id").from("table1"))
+                    .with("cte2", ClickHouseQuery.select("id").from("table2"))
+                    .select("*")
+                    .from("cte1")
+                    .join("cte2").on("cte2.id", "cte1.id")
+                    .toSql();
+
+            assertTrue(sql.contains("WITH cte1 AS ("));
+            assertTrue(sql.contains("cte2 AS ("));
+            assertTrue(sql.contains("FROM cte1"));
+            assertTrue(sql.contains("JOIN cte2"));
+        }
+
+        @Test
+        @DisplayName("CTE merges params into main query")
+        void cteMergesParams() {
+            ClickHouseQuery q = ClickHouseQuery
+                    .with("filtered_orders",
+                            ClickHouseQuery.select("*").from("orders").where("tenant_id").eq("op-1"))
+                    .select("user_id", "sum(amount) AS total")
+                    .from("filtered_orders")
+                    .groupBy("user_id");
+
+            q.toSql();
+            assertEquals("op-1", q.toParams().getValue("tenantId"));
+        }
+
+        @Test
+        @DisplayName("CTE with ORDER BY and LIMIT")
+        void cteWithOrderByLimit() {
+            String sql = ClickHouseQuery
+                    .with("top_users",
+                            ClickHouseQuery.select("user_id", "sum(amount) AS total")
+                                    .from("orders").groupBy("user_id"))
+                    .select("user_id", "total")
+                    .from("top_users")
+                    .orderBy("total", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.startsWith("WITH top_users AS ("));
+            assertTrue(sql.contains("ORDER BY total DESC"));
+            assertTrue(sql.contains("LIMIT :_limit"));
+        }
+    }
 }

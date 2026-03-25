@@ -235,4 +235,60 @@ class CHTest {
 
         assertTrue(result.contains("BETWEEN 'A' AND 'C'"));
     }
+
+    // ── Conditional Aggregates ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("countIf() generates countIf(column, condition)")
+    void countIf() {
+        assertEquals("countIf(user_id, status = 'ACTIVE') AS active_users",
+                CH.countIf("user_id", "status = 'ACTIVE'").as("active_users"));
+    }
+
+    @Test
+    @DisplayName("minIf() generates minIf(column, condition)")
+    void minIf() {
+        assertEquals("minIf(amount, type = 'SALE') AS min_sale",
+                CH.minIf("amount", "type = 'SALE'").as("min_sale"));
+    }
+
+    @Test
+    @DisplayName("maxIf() generates maxIf(column, condition)")
+    void maxIf() {
+        assertEquals("maxIf(amount, type = 'SALE') AS max_sale",
+                CH.maxIf("amount", "type = 'SALE'").as("max_sale"));
+    }
+
+    @Test
+    @DisplayName("avgIf() generates avgIf(column, condition)")
+    void avgIf() {
+        assertEquals("avgIf(score, status = 'COMPLETED') AS avg_score",
+                CH.avgIf("score", "status = 'COMPLETED'").as("avg_score"));
+    }
+
+    @Test
+    @DisplayName("countIf with CH.in() condition")
+    void countIfWithIn() {
+        String result = CH.countIf("user_id", CH.in("status", "ACTIVE", "VIP")).as("vip_count");
+        assertEquals("countIf(user_id, status IN ('ACTIVE','VIP')) AS vip_count", result);
+    }
+
+    @Test
+    @DisplayName("Conditional aggregates in ClickHouseQuery.select()")
+    void conditionalAggregatesInQuery() {
+        String sql = ClickHouseQuery.select(
+                CH.col("product_id"),
+                CH.sumIf("amount", "action = 'BET'").as("total_bet"),
+                CH.countIf("user_id", "status = 'ACTIVE'").as("active_count"),
+                CH.minIf("amount", "type = 'SALE'").as("min_sale"),
+                CH.maxIf("amount", "type = 'SALE'").as("max_sale"),
+                CH.avgIf("score", "status = 'DONE'").as("avg_score")
+        ).from("orders").groupBy("product_id").toSql();
+
+        assertTrue(sql.contains("sumIf(amount, action = 'BET') AS total_bet"));
+        assertTrue(sql.contains("countIf(user_id, status = 'ACTIVE') AS active_count"));
+        assertTrue(sql.contains("minIf(amount, type = 'SALE') AS min_sale"));
+        assertTrue(sql.contains("maxIf(amount, type = 'SALE') AS max_sale"));
+        assertTrue(sql.contains("avgIf(score, status = 'DONE') AS avg_score"));
+    }
 }

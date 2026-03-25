@@ -14,6 +14,10 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **Subquery count** — `ClickHouseQuery.count(subQuery).execute(jdbc)`
 - ✅ **Multiple ORDER BY** — `.orderBy("col1", SortOrder.DESC).orderBy("col2", SortOrder.ASC)`
 - ✅ **Expression builder** — `CH.sum()`, `CH.count()`, `CH.avg()`, `CH.caseWhen()`
+- ✅ **Conditional aggregates** — `CH.countIf()`, `CH.minIf()`, `CH.maxIf()`, `CH.avgIf()`
+- ✅ **UNION ALL** — `.unionAll(ClickHouseQuery.select(...))`
+- ✅ **Subquery FROM** — `.from(ClickHouseQuery.select(...), "alias")`
+- ✅ **WITH (CTE)** — `ClickHouseQuery.with("name", subQuery).select(...)`
 
 ## Installation
 
@@ -251,7 +255,89 @@ ClickHouseQuery.select("*")
     .query(namedJdbc, rowMapper);
 ```
 
-### 11. Complex Query (Full Example)
+### 11. Conditional Aggregates
+
+```java
+import static lib.core.clickhouse.expression.CH.*;
+
+ClickHouseQuery.select(
+    col("product_id"),
+    sumIf("amount", "action = 'BET'").as("total_bet"),
+    countIf("user_id", "status = 'ACTIVE'").as("active_count"),
+    minIf("amount", "type = 'SALE'").as("min_sale"),
+    maxIf("amount", "type = 'SALE'").as("max_sale"),
+    avgIf("score", "status = 'COMPLETED'").as("avg_score"),
+    countIf("user_id", in("status", "VIP", "PREMIUM")).as("premium_count")
+).from("orders").groupBy("product_id");
+```
+
+### 12. Subquery FROM
+
+```java
+// Query from a subquery result set
+ClickHouseQuery.select("user_id", "total")
+    .from(
+        ClickHouseQuery.select("user_id", "sum(amount) AS total")
+            .from("orders")
+            .where("tenant_id").eq(tenantId)
+            .groupBy("user_id"),
+        "sub"  // alias
+    )
+    .where("total").gt(1000)
+    .orderBy("total", SortOrder.DESC)
+    .limit(10)
+    .query(namedJdbc, rowMapper);
+// → SELECT ... FROM (SELECT ... FROM orders ... GROUP BY user_id) AS sub WHERE total > ...
+```
+
+### 13. UNION ALL
+
+```java
+// Combine results from multiple tables
+ClickHouseQuery.select("user_id", "amount").from("orders_2024")
+    .unionAll(
+        ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+    )
+    .orderBy("amount", SortOrder.DESC)
+    .limit(10)
+    .query(namedJdbc, rowMapper);
+
+// Chain 3+ unions
+ClickHouseQuery.select("user_id", "amount").from("orders_2023")
+    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2024"))
+    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
+    .orderBy("amount", SortOrder.DESC)
+    .query(namedJdbc, rowMapper);
+```
+
+### 14. WITH (CTE — Common Table Expressions)
+
+```java
+// Single CTE
+ClickHouseQuery
+    .with("active_users",
+        ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+    .select("au.user_id", "count(*) AS order_count")
+    .from("orders o")
+    .join("active_users au").on("au.user_id", "o.user_id")
+    .groupBy("au.user_id")
+    .query(namedJdbc, rowMapper);
+
+// Multiple CTEs
+ClickHouseQuery
+    .with("cte_users",
+        ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+    .with("cte_orders",
+        ClickHouseQuery.select("user_id", "sum(amount) AS total")
+            .from("orders").groupBy("user_id"))
+    .select("u.user_id", "o.total")
+    .from("cte_users u")
+    .join("cte_orders o").on("o.user_id", "u.user_id")
+    .orderBy("o.total", SortOrder.DESC)
+    .query(namedJdbc, rowMapper);
+```
+
+### 15. Complex Query (Full Example)
 
 ```java
 import static lib.core.clickhouse.expression.CH.*;
@@ -354,6 +440,10 @@ SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMI
 | `max("col")` | `max(col)` |
 | `avg("col")` | `avg(col)` |
 | `in("col", "v1", "v2")` | `col IN ('v1','v2')` |
+| `countIf("col", "cond")` | `countIf(col, cond)` |
+| `minIf("col", "cond")` | `minIf(col, cond)` |
+| `maxIf("col", "cond")` | `maxIf(col, cond)` |
+| `avgIf("col", "cond")` | `avgIf(col, cond)` |
 | `.as("alias")` | `... AS alias` |
 
 ### CASE WHEN Operators
@@ -414,6 +504,9 @@ SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMI
 | **Execute** | `.query(jdbc, mapper)` | Run and map results |
 | | `.queryForObject(jdbc, type)` | Single value |
 | | `.count(jdbc)` | Terminal count |
+| **UNION ALL** | `.unionAll(subQuery)` | Append UNION ALL query |
+| **FROM** | `.from(subQuery, "alias")` | Subquery as table source |
+| **CTE** | `.with("name", subQuery).select(...)` | Common Table Expression |
 | **Static** | `ClickHouseQuery.count(subQuery)` | Subquery count builder |
 
 ### CHParams (Insert Parameter Builder)
