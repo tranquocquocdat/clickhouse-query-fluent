@@ -11,7 +11,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
-import lib.core.clickhouse.ClickHouseQuery.SortOrder;
+import lib.core.clickhouse.SortOrder;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -828,7 +828,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Static count(subQuery) generates correct SQL")
         void countSubQuery_sql() {
-            ClickHouseQuery.CountQuery countQuery = ClickHouseQuery.count(
+            CountQuery countQuery = ClickHouseQuery.count(
                     ClickHouseQuery.select("user_id", "order_id")
                             .from("order_items")
                             .where("status").eq("CLOSED")
@@ -850,7 +850,7 @@ class ClickHouseQueryTest {
             Instant from = Instant.parse("2026-01-01T00:00:00Z");
             Instant to = Instant.parse("2026-12-31T23:59:59Z");
 
-            ClickHouseQuery.CountQuery countQuery = ClickHouseQuery.count(
+            CountQuery countQuery = ClickHouseQuery.count(
                     ClickHouseQuery.select("user_id", "order_id", "order_status")
                             .from("order_items")
                             .where("created_at").between(from, to)
