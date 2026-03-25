@@ -456,6 +456,131 @@ class ClickHouseQueryTest {
         }
 
         @Test
+        @DisplayName("whereOr fluent — eq, ne, gt, gte, lt, lte")
+        void whereOrFluentComparison() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("status").eq("ACTIVE")
+                            .where("status").ne("DELETED")
+                            .where("amount").gt(100)
+                            .where("amount").gte(50)
+                            .where("score").lt(10)
+                            .where("score").lte(5)
+                    ).toSql();
+
+            assertTrue(sql.contains("status = :_or0"));
+            assertTrue(sql.contains("status != :_or1"));
+            assertTrue(sql.contains("amount > :_or2"));
+            assertTrue(sql.contains("amount >= :_or3"));
+            assertTrue(sql.contains("score < :_or4"));
+            assertTrue(sql.contains("score <= :_or5"));
+            assertTrue(sql.contains(" OR "));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — in() with collection")
+        void whereOrFluentIn() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("status").in(List.of("ACTIVE", "PENDING"))
+                            .where("amount").gt(1000)
+                    ).toSql();
+
+            assertTrue(sql.contains("status IN (:_or0, :_or1)"));
+            assertTrue(sql.contains("amount > :_or2"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — notIn() with collection")
+        void whereOrFluentNotIn() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("type").notIn(List.of("TEST", "DEMO"))
+                    ).toSql();
+
+            assertTrue(sql.contains("type NOT IN (:_or0, :_or1)"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — isNull / isNotNull")
+        void whereOrFluentNullChecks() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("deleted_at").isNull()
+                            .where("status").isNotNull()
+                    ).toSql();
+
+            assertTrue(sql.contains("deleted_at IS NULL"));
+            assertTrue(sql.contains("status IS NOT NULL"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — ilike / like")
+        void whereOrFluentLike() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("name").ilike("john")
+                            .where("email").like("gmail")
+                    ).toSql();
+
+            assertTrue(sql.contains("name ILIKE :_or0"));
+            assertTrue(sql.contains("email LIKE :_or1"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — subquery in()")
+        void whereOrFluentSubqueryIn() {
+            String sql = ClickHouseQuery
+                    .select("*").from("orders")
+                    .whereOr(or -> or
+                            .where("user_id").in(
+                                ClickHouseQuery.select("id").from("vip_users")
+                            )
+                            .where("amount").gt(5000)
+                    ).toSql();
+
+            assertTrue(sql.contains("user_id IN (SELECT id"));
+            assertTrue(sql.contains("FROM vip_users)"));
+            assertTrue(sql.contains("amount > :_or0"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — null values are skipped")
+        void whereOrFluentSkipsNull() {
+            String sql = ClickHouseQuery
+                    .select("*").from("t")
+                    .whereOr(or -> or
+                            .where("status").eq(null)       // skipped
+                            .where("amount").gt(100)         // kept
+                            .where("type").in((List<?>) null) // skipped
+                    ).toSql();
+
+            assertFalse(sql.contains("status"));
+            assertTrue(sql.contains("amount > :_or0"));
+        }
+
+        @Test
+        @DisplayName("whereOr fluent — mixed with AND where")
+        void whereOrFluentWithAnd() {
+            String sql = ClickHouseQuery
+                    .select("*").from("orders")
+                    .where("tenant_id").eq("op-1")
+                    .whereOr(or -> or
+                            .where("status").eq("ACTIVE")
+                            .where("status").eq("PENDING")
+                    )
+                    .toSql();
+
+            assertTrue(sql.contains("tenant_id = :tenantId"));
+            assertTrue(sql.contains("(status = :_or0 OR status = :_or1)"));
+        }
+
+        @Test
         @DisplayName("whereRaw adds raw condition")
         void whereRaw() {
             String sql = ClickHouseQuery

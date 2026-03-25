@@ -25,6 +25,7 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **Auto DTO mapping** — `.query(jdbc, MyDto.class)` auto maps `snake_case` → `camelCase`
 - ✅ **Single result** — `.queryOne(jdbc, MyDto.class)` returns one DTO or `null`
 - ✅ **Default LIMIT** — auto `LIMIT 1000` when no explicit limit is set (safety guard)
+- ✅ **Fluent OR** — `.whereOr(or -> or.where("col").eq(v).where("col2").gt(n))` with full operator support
 
 ## Installation
 
@@ -699,3 +700,51 @@ List<Order> orders = ClickHouseQuery.select("user_id", "amount")
 ```
 
 > **Note:** `UNION ALL` queries are excluded from auto-limit. The default value is `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
+
+### 19. Fluent OR Conditions (`whereOr`)
+
+Build complex OR groups with the **same fluent operators** as WHERE:
+
+```java
+// Fluent OR — eq, ne, gt, gte, lt, lte, in, isNull, ilike, like, subquery
+ClickHouseQuery.select("*")
+    .from("orders")
+    .where("tenant_id").eq(tenantId)     // AND
+    .whereOr(or -> or                     // AND (
+        .where("status").eq("ACTIVE")     //   status = 'ACTIVE'
+        .where("status").eq("PENDING")    //   OR status = 'PENDING'
+    )                                     // )
+    .query(namedJdbc, Order.class);
+// → WHERE tenant_id = :tenantId AND (status = :_or0 OR status = :_or1)
+
+// Complex OR with multiple operators
+.whereOr(or -> or
+    .where("amount").gt(1000)                     // amount > 1000
+    .where("type").in(List.of("VIP", "PREMIUM"))   // OR type IN ('VIP','PREMIUM')
+    .where("name").ilike("john")                   // OR name ILIKE '%john%'
+    .where("deleted_at").isNull()                  // OR deleted_at IS NULL
+    .where("user_id").in(                          // OR user_id IN (subquery)
+        ClickHouseQuery.select("id").from("vip_users")
+    )
+)
+```
+
+**Supported operators inside `whereOr`:**
+
+| Operator | Example | SQL |
+|---|---|---|
+| `eq(v)` | `.where("status").eq("ACTIVE")` | `status = :_or0` |
+| `ne(v)` | `.where("status").ne("DELETED")` | `status != :_or0` |
+| `gt(v)` | `.where("amount").gt(100)` | `amount > :_or0` |
+| `gte(v)` | `.where("amount").gte(100)` | `amount >= :_or0` |
+| `lt(v)` | `.where("score").lt(10)` | `score < :_or0` |
+| `lte(v)` | `.where("score").lte(5)` | `score <= :_or0` |
+| `in(list)` | `.where("type").in(List.of(...))` | `type IN (:_or0, :_or1)` |
+| `notIn(list)` | `.where("type").notIn(List.of(...))` | `type NOT IN (...)` |
+| `isNull()` | `.where("col").isNull()` | `col IS NULL` |
+| `isNotNull()` | `.where("col").isNotNull()` | `col IS NOT NULL` |
+| `ilike(v)` | `.where("name").ilike("john")` | `name ILIKE '%john%'` |
+| `like(v)` | `.where("name").like("john")` | `name LIKE '%john%'` |
+| `in(subQuery)` | `.where("id").in(subQuery)` | `id IN (SELECT ...)` |
+
+> **Null-safe:** All operators inside `whereOr` skip the condition when value is `null` — same behavior as regular `where()`.
