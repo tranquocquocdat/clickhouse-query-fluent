@@ -203,21 +203,53 @@ public final class ClickHouseQuery {
      * ClickHouseQuery.select("user_id", "total")
      *     .from(
      *         ClickHouseQuery.select("user_id", "sum(amount) AS total")
-     *             .from("orders").groupBy("user_id"),
-     *         "sub"
+     *             .from("orders").groupBy("user_id")
      *     )
+     *     .as("sub")
      *     .where("total").gt(1000)
      * }</pre>
+     *
+     * @param subQuery the inner query
+     * @return a {@link SubQueryFromBuilder} — call {@code .as("alias")} to set the alias
+     */
+    public SubQueryFromBuilder from(ClickHouseQuery subQuery) {
+        advanceTo(Phase.FROM);
+        this.fromSubQuery = subQuery;
+        return new SubQueryFromBuilder(this);
+    }
+
+    /**
+     * FROM subquery with alias (shorthand).
      *
      * @param subQuery the inner query
      * @param alias    alias for the subquery table
      * @return this query builder
      */
     public ClickHouseQuery from(ClickHouseQuery subQuery, String alias) {
-        advanceTo(Phase.FROM);
-        this.fromSubQuery = subQuery;
-        this.fromSubQueryAlias = alias;
-        return this;
+        return from(subQuery).as(alias);
+    }
+
+    /**
+     * Intermediate builder for setting subquery alias fluently.
+     * <p>Usage: {@code .from(subQuery).as("alias")}
+     */
+    public static final class SubQueryFromBuilder {
+        private final ClickHouseQuery query;
+
+        SubQueryFromBuilder(ClickHouseQuery query) {
+            this.query = query;
+        }
+
+        /**
+         * Set the alias for this subquery.
+         *
+         * @param alias the alias name
+         * @return the parent query for further chaining
+         */
+        public ClickHouseQuery as(String alias) {
+            query.fromSubQueryAlias = alias;
+            return query;
+        }
     }
 
     // ── JOIN ─────────────────────────────────────────────────────────────
