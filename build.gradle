@@ -1,0 +1,63 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'lib.core'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Only dependency: Spring JDBC for MapSqlParameterSource & NamedParameterJdbcTemplate
+    api 'org.springframework:spring-jdbc:6.2.3'
+
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title': 'ClickHouse Query Builder',
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'dattran'
+        )
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+
+            pom {
+                name = 'ClickHouse Query Builder'
+                description = 'Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring NamedParameterJdbcTemplate'
+                url = 'https://github.com/tranquocquocdat/clickhouse-query-fluent'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+            }
+        }
+    }
+}
