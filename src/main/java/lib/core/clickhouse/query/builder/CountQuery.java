@@ -1,26 +1,16 @@
-package lib.core.clickhouse.query;
+package lib.core.clickhouse.query.builder;
 
+import lib.core.clickhouse.query.ClickHouseQuery;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 /**
  * Holder for a {@code SELECT COUNT(*) FROM (subquery)} pattern.
  * Created via {@link ClickHouseQuery#count(ClickHouseQuery)}.
- *
- * <pre>{@code
- * long total = ClickHouseQuery
- *     .count(
- *         ClickHouseQuery.select("user_id", "session_id")
- *             .from("order_items")
- *             .where("created_at").between(from, to)
- *             .groupBy("user_id", "session_id")
- *     )
- *     .execute(namedJdbc);
- * }</pre>
  */
 public final class CountQuery {
     private final ClickHouseQuery subQuery;
 
-    CountQuery(ClickHouseQuery subQuery) {
+    public CountQuery(ClickHouseQuery subQuery) {
         this.subQuery = subQuery;
     }
 

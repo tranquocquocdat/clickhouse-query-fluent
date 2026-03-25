@@ -1,24 +1,17 @@
-package lib.core.clickhouse.query;
+package lib.core.clickhouse.query.builder;
 
+import lib.core.clickhouse.query.ClickHouseQuery;
 
 /**
  * Fluent builder for HAVING conditions.
- * Created via {@link ClickHouseQuery#having(CH.Expr)} or {@link ClickHouseQuery#having(String)}.
- *
- * <pre>{@code
- * import static lib.core.clickhouse.CH.*;
- *
- * .having(sum("amount")).gt(100)
- * .having(count()).gte(5)
- * .having(avg("score")).between(50, 100)
- * }</pre>
+ * Created via {@link ClickHouseQuery#having(String)}.
  */
 public final class HavingBuilder {
     private final ClickHouseQuery query;
     private final String expression;
     private static int paramSeq = 0;
 
-    HavingBuilder(ClickHouseQuery query, String expression) {
+    public HavingBuilder(ClickHouseQuery query, String expression) {
         this.query = query;
         this.expression = expression;
     }

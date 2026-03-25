@@ -1,7 +1,8 @@
-package lib.core.clickhouse.query;
+package lib.core.clickhouse.query.builder;
 
-
+import lib.core.clickhouse.query.ClickHouseQuery;
 import lib.core.clickhouse.util.ClickHouseDateUtil;
+
 import java.time.Instant;
 import java.util.Collection;
 import java.util.StringJoiner;
@@ -9,20 +10,12 @@ import java.util.StringJoiner;
 /**
  * Fluent builder for WHERE conditions on a specific column.
  * Created via {@link ClickHouseQuery#where(String)}.
- *
- * <pre>{@code
- * .where("tenant_id").eq(tenantId)
- * .where("amount").gt(100)
- * .where("created_at").between(from, to)
- * .where("session_status").eqIfNotBlank(status)
- * .where("product_id").in(productIds)
- * }</pre>
  */
 public final class WhereBuilder {
     private final ClickHouseQuery query;
     private final String column;
 
-    WhereBuilder(ClickHouseQuery query, String column) {
+    public WhereBuilder(ClickHouseQuery query, String column) {
         this.query = query;
         this.column = column;
     }
@@ -116,7 +109,6 @@ public final class WhereBuilder {
 
     /**
      * IN clause with auto-expansion.
-     * <p>Generates individual params: {@code :col0, :col1, :col2...}
      * <p>Skipped when values is null or empty.
      */
     public <T> ClickHouseQuery in(Collection<T> values) {
@@ -136,7 +128,6 @@ public final class WhereBuilder {
 
     /**
      * NOT IN clause with auto-expansion.
-     * <p>Generates individual params: {@code :colNot0, :colNot1...}
      * <p>Skipped when values is null or empty.
      */
     public <T> ClickHouseQuery notIn(Collection<T> values) {
@@ -178,34 +169,14 @@ public final class WhereBuilder {
         return query;
     }
 
-    /**
-     * Fluent {@code column IN (subquery)} using a ClickHouseQuery.
-     * <pre>{@code
-     * .where("product_id").in(
-     *     ClickHouseQuery.select("id").from("games").where("active").eq(1)
-     * )
-     * }</pre>
-     *
-     * @param subQuery the inner query builder
-     * @return the parent query builder
-     */
+    /** Fluent {@code column IN (subquery)} using a ClickHouseQuery. */
     public ClickHouseQuery in(ClickHouseQuery subQuery) {
         query.whereClauses.add(column + " IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));
         return query;
     }
 
-    /**
-     * Fluent {@code column NOT IN (subquery)} using a ClickHouseQuery.
-     * <pre>{@code
-     * .where("user_id").notIn(
-     *     ClickHouseQuery.select("id").from("banned_users").where("active").eq(1)
-     * )
-     * }</pre>
-     *
-     * @param subQuery the inner query builder
-     * @return the parent query builder
-     */
+    /** Fluent {@code column NOT IN (subquery)} using a ClickHouseQuery. */
     public ClickHouseQuery notIn(ClickHouseQuery subQuery) {
         query.whereClauses.add(column + " NOT IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));

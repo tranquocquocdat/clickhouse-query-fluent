@@ -1,5 +1,6 @@
-package lib.core.clickhouse.query;
+package lib.core.clickhouse.query.builder;
 
+import lib.core.clickhouse.query.ClickHouseQuery;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,21 +8,13 @@ import java.util.List;
 /**
  * Builder for OR-grouped WHERE conditions.
  * Created via {@link ClickHouseQuery#whereOr(java.util.function.Consumer)}.
- *
- * <pre>{@code
- * .whereOr(or -> or
- *     .add("status", "ACTIVE")
- *     .add("status", "PENDING")
- * )
- * // → (status = :_or0 OR status = :_or1)
- * }</pre>
  */
 public final class OrBuilder {
     private final ClickHouseQuery query;
     private final List<String> conditions = new ArrayList<>();
     private static int orSeq = 0;
 
-    OrBuilder(ClickHouseQuery query) {
+    public OrBuilder(ClickHouseQuery query) {
         this.query = query;
     }
 
@@ -33,7 +26,7 @@ public final class OrBuilder {
         return this;
     }
 
-    /** Raw condition with param: {@code or.addRaw("amount > :minAmt", "minAmt", 100)} */
+    /** Raw condition with param. */
     public OrBuilder addRaw(String condition, String paramName, Object value) {
         conditions.add(condition);
         query.params.addValue(paramName, value);
@@ -46,7 +39,7 @@ public final class OrBuilder {
         return this;
     }
 
-    void apply() {
+    public void apply() {
         if (!conditions.isEmpty()) {
             query.whereClauses.add("(" + String.join(" OR ", conditions) + ")");
         }

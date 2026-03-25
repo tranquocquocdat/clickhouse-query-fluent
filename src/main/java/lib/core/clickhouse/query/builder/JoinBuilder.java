@@ -1,5 +1,6 @@
-package lib.core.clickhouse.query;
+package lib.core.clickhouse.query.builder;
 
+import lib.core.clickhouse.query.ClickHouseQuery;
 
 /**
  * Fluent builder for JOIN conditions.
@@ -20,7 +21,7 @@ public final class JoinBuilder {
     private final String joinType;
     private final String table;
 
-    JoinBuilder(ClickHouseQuery query, String joinType, String table) {
+    public JoinBuilder(ClickHouseQuery query, String joinType, String table) {
         this.query = query;
         this.joinType = joinType;
         this.table = table;
@@ -28,11 +29,6 @@ public final class JoinBuilder {
 
     /**
      * Fluent ON with equality: {@code ON leftCol = rightCol}.
-     *
-     * <pre>{@code
-     * .join("user_profile u").on("u.id", "t.user_id")
-     * // → JOIN user_profile u ON u.id = t.user_id
-     * }</pre>
      *
      * @param leftColumn  the left column (e.g. {@code "u.id"})
      * @param rightColumn the right column (e.g. {@code "t.user_id"})
@@ -45,10 +41,6 @@ public final class JoinBuilder {
 
     /**
      * Raw ON condition for complex cases.
-     *
-     * <pre>{@code
-     * .join("user_profile u").on("u.id = t.user_id AND u.active = 1")
-     * }</pre>
      *
      * @param condition the raw join condition
      * @return the parent query builder

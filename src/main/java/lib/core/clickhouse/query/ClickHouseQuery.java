@@ -2,6 +2,7 @@ package lib.core.clickhouse.query;
 
 
 import lib.core.clickhouse.expression.CH;
+import lib.core.clickhouse.query.builder.*;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -83,17 +84,17 @@ public final class ClickHouseQuery {
     private Phase currentPhase = Phase.SELECT;
 
     // Package-private fields — accessed by builder classes in the same package
-    final List<String> selectColumns = new ArrayList<>();
-    boolean distinct;
-    String tableName;
-    final List<String> joinClauses = new ArrayList<>();
-    final List<String> whereClauses = new ArrayList<>();
-    final MapSqlParameterSource params = new MapSqlParameterSource();
-    final List<String> groupByColumns = new ArrayList<>();
-    final List<String> havingClauses = new ArrayList<>();
-    final List<String> orderByClauses = new ArrayList<>();
-    Integer limitVal;
-    Long offsetVal;
+    public final List<String> selectColumns = new ArrayList<>();
+    public boolean distinct;
+    public String tableName;
+    public final List<String> joinClauses = new ArrayList<>();
+    public final List<String> whereClauses = new ArrayList<>();
+    public final MapSqlParameterSource params = new MapSqlParameterSource();
+    public final List<String> groupByColumns = new ArrayList<>();
+    public final List<String> havingClauses = new ArrayList<>();
+    public final List<String> orderByClauses = new ArrayList<>();
+    public Integer limitVal;
+    public Long offsetVal;
 
     private ClickHouseQuery() {}
 
@@ -501,7 +502,7 @@ public final class ClickHouseQuery {
     // ── Utilities ────────────────────────────────────────────────────────
 
     /** Convert snake_case to camelCase for parameter naming. */
-    static String toCamelCase(String snake) {
+    public static String toCamelCase(String snake) {
         String[] parts = snake.split("_");
         StringBuilder sb = new StringBuilder(parts[0]);
         for (int i = 1; i < parts.length; i++) {
