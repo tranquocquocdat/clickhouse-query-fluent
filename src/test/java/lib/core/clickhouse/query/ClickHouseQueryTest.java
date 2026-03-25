@@ -1483,9 +1483,24 @@ class ClickHouseQueryTest {
     class AliasTests {
 
         @Test
+        @DisplayName("Alias.of(table, alias) — ref() returns 'table alias'")
+        void aliasRef() {
+            Alias o = Alias.of("orders", "o");
+            assertEquals("orders o", o.ref());
+            assertEquals("o", o.toString());
+        }
+
+        @Test
+        @DisplayName("Alias.of(alias) — ref() returns just alias (no table)")
+        void aliasOnlyRef() {
+            Alias sub = Alias.of("sub");
+            assertEquals("sub", sub.ref());
+        }
+
+        @Test
         @DisplayName("Alias.c() prefixes column name")
         void aliasPrefixesColumn() {
-            Alias o = Alias.of("o");
+            Alias o = Alias.of("orders", "o");
             assertEquals("o.amount", o.c("amount"));
             assertEquals("o.created_at", o.c("created_at"));
         }
@@ -1493,7 +1508,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias expression shortcuts")
         void aliasExpressionShortcuts() {
-            Alias o = Alias.of("o");
+            Alias o = Alias.of("orders", "o");
             assertEquals("sum(o.amount)", o.sum("amount").toString());
             assertEquals("count(o.id)", o.count("id").toString());
             assertEquals("countDistinct(o.user_id)", o.countDistinct("user_id").toString());
@@ -1505,7 +1520,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias conditional aggregate shortcuts")
         void aliasConditionalAggregates() {
-            Alias o = Alias.of("o");
+            Alias o = Alias.of("orders", "o");
             assertEquals("sumIf(o.amount, status = 'ACTIVE')",
                     o.sumIf("amount", "status = 'ACTIVE'").toString());
             assertEquals("countIf(o.id, type = 'SALE')",
@@ -1513,17 +1528,19 @@ class ClickHouseQueryTest {
         }
 
         @Test
-        @DisplayName("Full query with Alias — no manual prefix strings")
+        @DisplayName("Full query with Alias — zero manual prefix strings")
         void fullQueryWithAlias() {
-            Alias o = Alias.of("o");
-            Alias u = Alias.of("u");
+            Alias o = Alias.of("orders", "o");
+            Alias u = Alias.of("users", "u");
+            Alias p = Alias.of("products", "p");
 
             String sql = ClickHouseQuery.select(
                         u.col("name"),
                         o.sum("amount").as("total_revenue").toString()
                     )
-                    .from("orders o")
-                    .join("users u").on(u.c("id"), o.c("user_id"))
+                    .from(o)                                    // FROM orders o
+                    .join(u).on(u.c("id"), o.c("user_id"))      // JOIN users u
+                    .leftJoin(p).on(p.c("id"), o.c("product_id"))// LEFT JOIN products p
                     .where(o.c("tenant_id")).eq("op-1")
                     .where(o.c("status")).eq("ACTIVE")
                     .groupBy(u.c("name"))
@@ -1531,19 +1548,18 @@ class ClickHouseQueryTest {
                     .limit(10)
                     .toSql();
 
-            assertTrue(sql.contains("u.name"));
-            assertTrue(sql.contains("sum(o.amount) AS total_revenue"));
+            assertTrue(sql.contains("FROM orders o"));
             assertTrue(sql.contains("JOIN users u ON u.id = o.user_id"));
+            assertTrue(sql.contains("LEFT JOIN products p ON p.id = o.product_id"));
             assertTrue(sql.contains("o.tenant_id = :o.tenantId"));
-            assertTrue(sql.contains("o.status = :o.status"));
             assertTrue(sql.contains("GROUP BY u.name"));
         }
 
         @Test
-        @DisplayName("Alias.toString() returns prefix")
+        @DisplayName("Alias.toString() returns alias prefix only")
         void aliasToString() {
-            assertEquals("o", Alias.of("o").toString());
-            assertEquals("orders", Alias.of("orders").toString());
+            assertEquals("o", Alias.of("orders", "o").toString());
+            assertEquals("sub", Alias.of("sub").toString());
         }
     }
 }

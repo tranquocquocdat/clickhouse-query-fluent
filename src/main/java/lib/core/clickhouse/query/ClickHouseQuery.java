@@ -197,6 +197,17 @@ public final class ClickHouseQuery {
     }
 
     /**
+     * Set the table from an {@link Alias}.
+     * {@code .from(o)} → {@code FROM orders o}
+     *
+     * @param alias the table alias (created with {@code Alias.of("orders", "o")})
+     * @return this query builder
+     */
+    public ClickHouseQuery from(Alias alias) {
+        return from(alias.ref());
+    }
+
+    /**
      * FROM subquery: {@code FROM (SELECT ...) AS alias}.
      *
      * <pre>{@code
@@ -268,6 +279,11 @@ public final class ClickHouseQuery {
         return new JoinBuilder(this, "JOIN", table);
     }
 
+    /** INNER JOIN using an {@link Alias}. {@code .join(u)} → {@code JOIN users u} */
+    public JoinBuilder join(Alias alias) {
+        return join(alias.ref());
+    }
+
     /**
      * Fluent LEFT JOIN.
      * <pre>{@code
@@ -279,6 +295,11 @@ public final class ClickHouseQuery {
         return new JoinBuilder(this, "LEFT JOIN", table);
     }
 
+    /** LEFT JOIN using an {@link Alias}. {@code .leftJoin(p)} → {@code LEFT JOIN products p} */
+    public JoinBuilder leftJoin(Alias alias) {
+        return leftJoin(alias.ref());
+    }
+
     /**
      * Fluent RIGHT JOIN.
      * <pre>{@code
@@ -288,6 +309,11 @@ public final class ClickHouseQuery {
     public JoinBuilder rightJoin(String table) {
         advanceTo(Phase.JOIN);
         return new JoinBuilder(this, "RIGHT JOIN", table);
+    }
+
+    /** RIGHT JOIN using an {@link Alias}. {@code .rightJoin(x)} → {@code RIGHT JOIN x_table x} */
+    public JoinBuilder rightJoin(Alias alias) {
+        return rightJoin(alias.ref());
     }
 
     // ── WHERE (fluent column-first) ──────────────────────────────────────

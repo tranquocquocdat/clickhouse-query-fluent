@@ -6,37 +6,59 @@ import lib.core.clickhouse.expression.CH;
  * Type-safe table alias for avoiding hard-coded prefix strings.
  *
  * <pre>{@code
- * Alias o = Alias.of("o");
- * Alias u = Alias.of("u");
+ * Alias o = Alias.of("orders", "o");
+ * Alias u = Alias.of("users", "u");
  *
  * ClickHouseQuery.select(
- *         col(u.c("name")),
- *         sum(o.c("amount")).as("total_revenue")
+ *         u.col("name"),
+ *         o.sum("amount").as("total_revenue")
  *     )
- *     .from("orders o")
- *     .join("users u").on(u.c("id"), o.c("user_id"))
+ *     .from(o)                                     // FROM orders o
+ *     .join(u).on(u.c("id"), o.c("user_id"))       // JOIN users u ON ...
  *     .where(o.c("tenant_id")).eq(tenantId)
- *     .where(o.c("created_at")).between(from, to)
- *     .orderBy(o.c("amount"), SortOrder.DESC)
  *     .query(namedJdbc, rowMapper);
  * }</pre>
  */
 public final class Alias {
 
-    private final String prefix;
+    private final String table;
+    private final String alias;
 
-    private Alias(String prefix) {
-        this.prefix = prefix;
+    private Alias(String table, String alias) {
+        this.table = table;
+        this.alias = alias;
     }
 
     /**
-     * Create a new Alias.
+     * Create an Alias with table name + short alias.
      *
-     * @param name the alias name (e.g. {@code "o"}, {@code "u"})
+     * @param table the table name (e.g. {@code "orders"})
+     * @param alias the short alias (e.g. {@code "o"})
      * @return a reusable Alias instance
      */
-    public static Alias of(String name) {
-        return new Alias(name);
+    public static Alias of(String table, String alias) {
+        return new Alias(table, alias);
+    }
+
+    /**
+     * Create an alias-only reference (no table name).
+     * Use this when you only need column prefixing (e.g. for subquery aliases).
+     *
+     * @param alias the alias name (e.g. {@code "sub"})
+     * @return a reusable Alias instance
+     */
+    public static Alias of(String alias) {
+        return new Alias(null, alias);
+    }
+
+    /**
+     * Returns {@code "tableName alias"} for FROM/JOIN clauses.
+     * If no table was set (alias-only), returns just the alias.
+     *
+     * @return the table reference string
+     */
+    public String ref() {
+        return table != null ? table + " " + alias : alias;
     }
 
     /**
@@ -47,7 +69,7 @@ public final class Alias {
      * @return the fully-qualified column string
      */
     public String c(String column) {
-        return prefix + "." + column;
+        return alias + "." + column;
     }
 
     // ── CH expression shortcuts ─────────────────────────────────────────
@@ -115,6 +137,6 @@ public final class Alias {
     /** Returns the alias prefix (e.g. {@code "o"}) */
     @Override
     public String toString() {
-        return prefix;
+        return alias;
     }
 }

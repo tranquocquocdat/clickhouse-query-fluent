@@ -556,8 +556,9 @@ Avoid hard-coded `"o."`, `"u."` prefix strings with the `Alias` helper:
 ```java
 import lib.core.clickhouse.query.Alias;
 
-Alias o = Alias.of("o");  // orders
-Alias u = Alias.of("u");  // users
+Alias o = Alias.of("orders", "o");
+Alias u = Alias.of("users", "u");
+Alias p = Alias.of("products", "p");
 
 List<Report> report = ClickHouseQuery.select(
         u.col("name"),                              // u.name
@@ -566,8 +567,9 @@ List<Report> report = ClickHouseQuery.select(
         o.min("created_at").as("first_order"),        // min(o.created_at)
         o.max("created_at").as("last_order")          // max(o.created_at)
     )
-    .from("orders o")
-    .join("users u").on(u.c("id"), o.c("user_id"))   // u.id = o.user_id
+    .from(o)                                         // FROM orders o
+    .join(u).on(u.c("id"), o.c("user_id"))           // JOIN users u ON u.id = o.user_id
+    .leftJoin(p).on(p.c("id"), o.c("product_id"))    // LEFT JOIN products p
     .where(o.c("tenant_id")).eq(tenantId)             // o.tenant_id = :o.tenantId
     .where(o.c("created_at")).between(from, to)
     .where(o.c("status")).eqIfNotBlank(status)
@@ -583,6 +585,7 @@ List<Report> report = ClickHouseQuery.select(
 
 | Method | Output |
 |---|---|
+| `o.ref()` | `"orders o"` (for FROM/JOIN) |
 | `o.c("amount")` | `"o.amount"` |
 | `o.col("amount")` | `"o.amount"` |
 | `o.sum("amount")` | `sum(o.amount)` |
