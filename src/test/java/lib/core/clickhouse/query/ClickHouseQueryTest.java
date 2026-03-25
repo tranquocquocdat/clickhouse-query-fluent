@@ -888,6 +888,137 @@ class ClickHouseQueryTest {
                     )
             );
         }
+
+        @Test
+        @DisplayName("JOIN after GROUP_BY throws IllegalStateException")
+        void joinAfterGroupByThrows() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.select("*")
+                    .from("orders")
+                    .groupBy("user_id")
+                    .join("users u").on("u.id", "orders.user_id")
+            );
+        }
+
+        @Test
+        @DisplayName("WHERE after HAVING throws IllegalStateException")
+        void whereAfterHavingThrows() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.select("user_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupBy("user_id")
+                    .having("sum(amount)").gt(100)
+                    .where("status").eq("ACTIVE")
+            );
+        }
+
+        @Test
+        @DisplayName("FROM(subQuery) after WHERE throws IllegalStateException")
+        void fromSubQueryAfterWhereThrows() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.select("*")
+                    .from("t")
+                    .where("status").eq("X")
+                    .from(ClickHouseQuery.select("id").from("other")).as("sub")
+            );
+        }
+
+        @Test
+        @DisplayName("groupBy after LIMIT throws IllegalStateException")
+        void groupByAfterLimitThrows() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.select("*")
+                    .from("t")
+                    .limit(10)
+                    .groupBy("user_id")
+            );
+        }
+
+        @Test
+        @DisplayName("UNION ALL + ORDER BY + LIMIT is allowed")
+        void unionAllWithOrderByLimitAllowed() {
+            // Should NOT throw — ORDER BY/LIMIT after UNION ALL is valid SQL
+            String sql = ClickHouseQuery
+                    .select("user_id", "amount").from("orders_2024")
+                    .where("status").eq("ACTIVE")
+                    .unionAll(
+                        ClickHouseQuery.select("user_id", "amount").from("orders_2025")
+                    )
+                    .orderBy("amount", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains("UNION ALL"));
+            assertTrue(sql.contains("ORDER BY amount DESC"));
+            assertTrue(sql.contains("LIMIT :_limit"));
+        }
+
+        @Test
+        @DisplayName("CTE inner query validates phase order")
+        void cteInnerQueryValidatesPhase() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.with("bad_cte",
+                    ClickHouseQuery.select("id")
+                        .from("users")
+                        .orderBy("id")
+                        .where("active").eq(1)  // WHERE after ORDER_BY → ERROR inside CTE!
+                ).select("*").from("bad_cte").toSql()
+            );
+        }
+
+        @Test
+        @DisplayName("Subquery FROM inner query validates phase order")
+        void subqueryFromInnerQueryValidatesPhase() {
+            assertThrows(IllegalStateException.class, () ->
+                ClickHouseQuery.select("*")
+                    .from(
+                        ClickHouseQuery.select("id")
+                            .from("users")
+                            .limit(10)
+                            .where("active").eq(1)  // WHERE after LIMIT → ERROR inside subquery!
+                    ).as("sub").toSql()
+            );
+        }
+
+        @Test
+        @DisplayName("Multiple same-phase calls are allowed")
+        void multipleSamePhaseAllowed() {
+            // Multiple WHERE, JOIN, ORDER BY — should all work
+            String sql = ClickHouseQuery.select("*")
+                    .from("orders o")
+                    .join("users u").on("u.id", "o.user_id")
+                    .leftJoin("products p").on("p.id", "o.product_id")
+                    .where("o.status").eq("ACTIVE")
+                    .where("o.amount").gt(100)
+                    .where("o.deleted_at").isNull()
+                    .groupBy("o.user_id")
+                    .having("sum(o.amount)").gt(500)
+                    .orderBy("o.amount", SortOrder.DESC)
+                    .orderBy("o.created_at", SortOrder.ASC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains("JOIN users u"));
+            assertTrue(sql.contains("LEFT JOIN products p"));
+            assertTrue(sql.contains("o.status = :o.status"));
+            assertTrue(sql.contains("o.amount > :o.amountGt"));
+            assertTrue(sql.contains("ORDER BY o.amount DESC, o.created_at ASC"));
+        }
+
+        @Test
+        @DisplayName("Skipping multiple phases is allowed (SELECT → FROM → ORDER_BY → LIMIT, no WHERE)")
+        void skippingMultiplePhasesAllowed() {
+            // SELECT → FROM → ORDER_BY (skipping JOIN, WHERE, GROUP_BY, HAVING)
+            String sql = ClickHouseQuery.select("*")
+                    .from("orders")
+                    .orderBy("created_at", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains("FROM orders"));
+            assertTrue(sql.contains("ORDER BY created_at DESC"));
+            assertFalse(sql.contains("WHERE"));
+        }
     }
 
     // ── CountQuery ───────────────────────────────────────────────────────
