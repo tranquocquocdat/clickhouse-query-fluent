@@ -1475,4 +1475,75 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("LIMIT :_limit"));
         }
     }
+
+    // ── Alias ────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Alias — type-safe table prefix")
+    class AliasTests {
+
+        @Test
+        @DisplayName("Alias.c() prefixes column name")
+        void aliasPrefixesColumn() {
+            Alias o = Alias.of("o");
+            assertEquals("o.amount", o.c("amount"));
+            assertEquals("o.created_at", o.c("created_at"));
+        }
+
+        @Test
+        @DisplayName("Alias expression shortcuts")
+        void aliasExpressionShortcuts() {
+            Alias o = Alias.of("o");
+            assertEquals("sum(o.amount)", o.sum("amount").toString());
+            assertEquals("count(o.id)", o.count("id").toString());
+            assertEquals("countDistinct(o.user_id)", o.countDistinct("user_id").toString());
+            assertEquals("min(o.created_at)", o.min("created_at").toString());
+            assertEquals("max(o.created_at)", o.max("created_at").toString());
+            assertEquals("avg(o.score)", o.avg("score").toString());
+        }
+
+        @Test
+        @DisplayName("Alias conditional aggregate shortcuts")
+        void aliasConditionalAggregates() {
+            Alias o = Alias.of("o");
+            assertEquals("sumIf(o.amount, status = 'ACTIVE')",
+                    o.sumIf("amount", "status = 'ACTIVE'").toString());
+            assertEquals("countIf(o.id, type = 'SALE')",
+                    o.countIf("id", "type = 'SALE'").toString());
+        }
+
+        @Test
+        @DisplayName("Full query with Alias — no manual prefix strings")
+        void fullQueryWithAlias() {
+            Alias o = Alias.of("o");
+            Alias u = Alias.of("u");
+
+            String sql = ClickHouseQuery.select(
+                        u.col("name"),
+                        o.sum("amount").as("total_revenue").toString()
+                    )
+                    .from("orders o")
+                    .join("users u").on(u.c("id"), o.c("user_id"))
+                    .where(o.c("tenant_id")).eq("op-1")
+                    .where(o.c("status")).eq("ACTIVE")
+                    .groupBy(u.c("name"))
+                    .orderBy("total_revenue", SortOrder.DESC)
+                    .limit(10)
+                    .toSql();
+
+            assertTrue(sql.contains("u.name"));
+            assertTrue(sql.contains("sum(o.amount) AS total_revenue"));
+            assertTrue(sql.contains("JOIN users u ON u.id = o.user_id"));
+            assertTrue(sql.contains("o.tenant_id = :o.tenantId"));
+            assertTrue(sql.contains("o.status = :o.status"));
+            assertTrue(sql.contains("GROUP BY u.name"));
+        }
+
+        @Test
+        @DisplayName("Alias.toString() returns prefix")
+        void aliasToString() {
+            assertEquals("o", Alias.of("o").toString());
+            assertEquals("orders", Alias.of("orders").toString());
+        }
+    }
 }

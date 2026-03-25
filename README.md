@@ -18,6 +18,9 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **UNION ALL** — `.unionAll(ClickHouseQuery.select(...))`
 - ✅ **Subquery FROM** — `.from(ClickHouseQuery.select(...), "alias")`
 - ✅ **WITH (CTE)** — `ClickHouseQuery.with("name", subQuery).select(...)`
+- ✅ **Type-safe Alias** — `Alias o = Alias.of("o")` → `o.c("amount")` / `o.sum("amount")`
+- ✅ **Null-safe WHERE** — all operators skip clause when value is `null`
+- ✅ **Prefix search** — `.whereILike(kw).onPrefix("col")` → `keyword%` (index-friendly)
 
 ## Installation
 
@@ -545,3 +548,48 @@ SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMI
 
 - Java 21+
 - Spring JDBC 6.x
+
+### 15. Type-Safe Alias
+
+Avoid hard-coded `"o."`, `"u."` prefix strings with the `Alias` helper:
+
+```java
+import lib.core.clickhouse.query.Alias;
+
+Alias o = Alias.of("o");  // orders
+Alias u = Alias.of("u");  // users
+
+List<Report> report = ClickHouseQuery.select(
+        u.col("name"),                              // u.name
+        o.sum("amount").as("total_revenue"),          // sum(o.amount) AS total_revenue
+        o.countDistinct("order_id").as("order_count"),// countDistinct(o.order_id)
+        o.min("created_at").as("first_order"),        // min(o.created_at)
+        o.max("created_at").as("last_order")          // max(o.created_at)
+    )
+    .from("orders o")
+    .join("users u").on(u.c("id"), o.c("user_id"))   // u.id = o.user_id
+    .where(o.c("tenant_id")).eq(tenantId)             // o.tenant_id = :o.tenantId
+    .where(o.c("created_at")).between(from, to)
+    .where(o.c("status")).eqIfNotBlank(status)
+    .whereILike(keyword).on(u.c("name"), o.c("order_id"))
+    .groupBy(u.c("name"))
+    .having(o.sum("amount")).gt(1000)
+    .orderBy("total_revenue", SortOrder.DESC)
+    .limit(50).offset(0)
+    .query(namedJdbc, rowMapper);
+```
+
+**Available Alias methods:**
+
+| Method | Output |
+|---|---|
+| `o.c("amount")` | `"o.amount"` |
+| `o.col("amount")` | `"o.amount"` |
+| `o.sum("amount")` | `sum(o.amount)` |
+| `o.count("id")` | `count(o.id)` |
+| `o.countDistinct("id")` | `countDistinct(o.id)` |
+| `o.min("created_at")` | `min(o.created_at)` |
+| `o.max("created_at")` | `max(o.created_at)` |
+| `o.avg("score")` | `avg(o.score)` |
+| `o.sumIf("amount", "cond")` | `sumIf(o.amount, cond)` |
+| `o.countIf("id", "cond")` | `countIf(o.id, cond)` |
