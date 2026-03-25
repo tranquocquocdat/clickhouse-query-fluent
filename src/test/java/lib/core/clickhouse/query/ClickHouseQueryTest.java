@@ -1562,4 +1562,65 @@ class ClickHouseQueryTest {
             assertEquals("sub", Alias.of("sub").toString());
         }
     }
+
+    // ── Page ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Page — single-query pagination")
+    class PageTests {
+
+        @Test
+        @DisplayName("Page helpers — totalPages, hasNext, hasPrevious, isEmpty")
+        void pageHelpers() {
+            Page<String> page = new Page<>(List.of("a", "b", "c"), 25, 0, 10);
+            assertEquals(25, page.getTotal());
+            assertEquals(0, page.getPage());
+            assertEquals(10, page.getPageSize());
+            assertEquals(3, page.getTotalPages());
+            assertTrue(page.hasNext());
+            assertFalse(page.hasPrevious());
+            assertFalse(page.isEmpty());
+        }
+
+        @Test
+        @DisplayName("Page — last page has no next")
+        void lastPageHasNoNext() {
+            Page<String> page = new Page<>(List.of("a"), 21, 2, 10);
+            assertEquals(3, page.getTotalPages());
+            assertFalse(page.hasNext());
+            assertTrue(page.hasPrevious());
+        }
+
+        @Test
+        @DisplayName("Page — empty result")
+        void emptyPage() {
+            Page<String> page = new Page<>(List.of(), 0, 0, 10);
+            assertTrue(page.isEmpty());
+            assertFalse(page.hasNext());
+            assertFalse(page.hasPrevious());
+            assertEquals(0, page.getTotalPages());
+        }
+
+        @Test
+        @DisplayName("queryPage — SQL injects count(*) OVER() and LIMIT/OFFSET")
+        void queryPageSqlGeneration() {
+            // Build query and manually check the SQL that queryPage would generate
+            ClickHouseQuery q = ClickHouseQuery.select("user_id", "amount")
+                    .from("orders")
+                    .where("tenant_id").eq("op-1")
+                    .orderBy("amount", SortOrder.DESC);
+
+            // Simulate what queryPage does: inject _total, set limit/offset
+            // We test via toSql after manual injection to avoid needing a real DB
+            q.selectColumns.add("count(*) OVER() AS _total");
+            q.limit(10).offset(20);
+
+            String sql = q.toSql();
+            assertTrue(sql.contains("count(*) OVER() AS _total"));
+            assertTrue(sql.contains("LIMIT :_limit"));
+            assertTrue(sql.contains("OFFSET :_offset"));
+            assertTrue(sql.contains("user_id"));
+            assertTrue(sql.contains("amount"));
+        }
+    }
 }

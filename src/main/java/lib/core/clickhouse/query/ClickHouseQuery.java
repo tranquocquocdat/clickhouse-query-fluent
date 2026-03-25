@@ -625,6 +625,56 @@ public final class ClickHouseQuery {
         return jdbc.query(toSql(), params, rowMapper);
     }
 
+    /**
+     * Execute a <b>single query</b> that returns both paginated data and total count.
+     * Internally appends {@code count(*) OVER() AS _total} to the SELECT, so no second query is needed.
+     *
+     * <pre>{@code
+     * Page<Report> page = ClickHouseQuery.select("user_id", "amount")
+     *     .from("orders")
+     *     .where("tenant_id").eq(tenantId)
+     *     .orderBy("created_at", SortOrder.DESC)
+     *     .queryPage(0, 10, namedJdbc, rowMapper);
+     *
+     * page.getData();       // List<Report>  (max 10 items)
+     * page.getTotal();      // 1234          (total matching rows)
+     * page.getTotalPages(); // 124
+     * page.hasNext();       // true
+     * }</pre>
+     *
+     * @param page      the page index (0-based)
+     * @param pageSize  number of rows per page
+     * @param jdbc      the JDBC template
+     * @param rowMapper the row mapper for data rows
+     * @param <T>       the row type
+     * @return a {@link Page} containing data + total count
+     */
+    public <T> Page<T> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, RowMapper<T> rowMapper) {
+        // Inject count(*) OVER() into SELECT columns
+        this.selectColumns.add("count(*) OVER() AS _total");
+
+        // Apply pagination
+        this.limitVal = pageSize;
+        this.offsetVal = (long) page * pageSize;
+
+        String sql = toSql();
+
+        // Track total from first row
+        final long[] totalHolder = {0};
+
+        List<T> data = jdbc.query(sql, params, (rs, rowNum) -> {
+            if (rowNum == 0) {
+                totalHolder[0] = rs.getLong("_total");
+            }
+            return rowMapper.mapRow(rs, rowNum);
+        });
+
+        // Remove the injected _total column so the builder can be reused
+        this.selectColumns.remove(this.selectColumns.size() - 1);
+
+        return new Page<>(data, totalHolder[0], page, pageSize);
+    }
+
     /** Execute query and return a single typed value. */
     public <T> T queryForObject(NamedParameterJdbcTemplate jdbc, Class<T> type) {
         return jdbc.queryForObject(toSql(), params, type);

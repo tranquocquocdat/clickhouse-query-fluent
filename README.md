@@ -21,6 +21,7 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **Type-safe Alias** — `Alias o = Alias.of("o")` → `o.c("amount")` / `o.sum("amount")`
 - ✅ **Null-safe WHERE** — all operators skip clause when value is `null`
 - ✅ **Prefix search** — `.whereILike(kw).onPrefix("col")` → `keyword%` (index-friendly)
+- ✅ **Single-query pagination** — `.queryPage(page, size, jdbc, mapper)` → `Page<T>` with data + total count
 
 ## Installation
 
@@ -596,3 +597,35 @@ List<Report> report = ClickHouseQuery.select(
 | `o.avg("score")` | `avg(o.score)` |
 | `o.sumIf("amount", "cond")` | `sumIf(o.amount, cond)` |
 | `o.countIf("id", "cond")` | `countIf(o.id, cond)` |
+
+### 16. Single-Query Pagination (`queryPage`)
+
+Get paginated data **and total count in a single query** — no need to execute two queries:
+
+```java
+Page<Report> page = ClickHouseQuery.select("user_id", "amount")
+    .from("orders")
+    .where("tenant_id").eq(tenantId)
+    .where("status").eqIfNotBlank(status)
+    .orderBy("amount", SortOrder.DESC)
+    .queryPage(0, 10, namedJdbc, rowMapper);   // page 0, size 10
+
+// Result
+page.getData();       // List<Report> — max 10 items
+page.getTotal();      // 1234 — total matching rows
+page.getTotalPages(); // 124
+page.hasNext();       // true
+page.hasPrevious();   // false (page 0)
+page.isEmpty();       // false
+```
+
+**Internally generates:**
+```sql
+SELECT user_id, amount, count(*) OVER() AS _total
+FROM orders
+WHERE tenant_id = :tenantId
+ORDER BY amount DESC
+LIMIT 10 OFFSET 0
+```
+
+`count(*) OVER()` is a window function that computes the total count **before** LIMIT is applied, so you get both data + total in one round-trip.
