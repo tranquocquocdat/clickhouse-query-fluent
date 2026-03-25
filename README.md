@@ -18,10 +18,13 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **UNION ALL** — `.unionAll(ClickHouseQuery.select(...))`
 - ✅ **Subquery FROM** — `.from(ClickHouseQuery.select(...), "alias")`
 - ✅ **WITH (CTE)** — `ClickHouseQuery.with("name", subQuery).select(...)`
-- ✅ **Type-safe Alias** — `Alias o = Alias.of("o")` → `o.c("amount")` / `o.sum("amount")`
+- ✅ **Type-safe Alias** — `Alias o = Alias.of("orders", "o")` → `.from(o)` / `.join(u)` / `o.sum("amount")`
 - ✅ **Null-safe WHERE** — all operators skip clause when value is `null`
 - ✅ **Prefix search** — `.whereILike(kw).onPrefix("col")` → `keyword%` (index-friendly)
 - ✅ **Single-query pagination** — `.queryPage(page, size, jdbc, mapper)` → `Page<T>` with data + total count
+- ✅ **Auto DTO mapping** — `.query(jdbc, MyDto.class)` auto maps `snake_case` → `camelCase`
+- ✅ **Single result** — `.queryOne(jdbc, MyDto.class)` returns one DTO or `null`
+- ✅ **Default LIMIT** — auto `LIMIT 1000` when no explicit limit is set (safety guard)
 
 ## Installation
 
@@ -629,3 +632,70 @@ LIMIT 10 OFFSET 0
 ```
 
 `count(*) OVER()` is a window function that computes the total count **before** LIMIT is applied, so you get both data + total in one round-trip.
+
+### 17. Auto DTO Mapping
+
+No need to write `RowMapper` — just pass your DTO class directly:
+
+```java
+// DTO class — field names match snake_case columns automatically
+public class OrderReport {
+    private String userId;            // ← auto mapped from user_id
+    private BigDecimal totalAmount;    // ← auto mapped from total_amount
+    private Long orderCount;           // ← auto mapped from order_count
+    // getters + setters (required)
+}
+
+// List query — zero RowMapper needed
+List<OrderReport> reports = ClickHouseQuery.select(
+        col("user_id"),
+        sum("amount").as("total_amount"),
+        count().as("order_count")
+    )
+    .from("orders")
+    .where("tenant_id").eq(tenantId)
+    .groupBy("user_id")
+    .query(namedJdbc, OrderReport.class);        // ← just pass Class
+
+// Single result
+OrderSummary summary = ClickHouseQuery.select(
+        "count(*) AS total_orders",
+        "sum(amount) AS total_amount"
+    )
+    .from("orders")
+    .where("tenant_id").eq(tenantId)
+    .queryOne(namedJdbc, OrderSummary.class);     // ← single DTO or null
+
+// Page with auto mapping
+Page<OrderReport> page = ClickHouseQuery.select(
+        col("user_id"),
+        sum("amount").as("total_amount")
+    )
+    .from("orders")
+    .groupBy("user_id")
+    .queryPage(0, 10, namedJdbc, OrderReport.class);  // ← Page<T>
+```
+
+Uses Spring's `BeanPropertyRowMapper` internally — maps `snake_case` DB columns to `camelCase` Java fields. DTO must have a **default constructor** and **setters**.
+
+> **Tip:** You can still use `RowMapper` for complex mapping: `.query(jdbc, (rs, rowNum) -> ...)`
+
+### 18. Default LIMIT (Safety Guard)
+
+When calling `.query()` without an explicit `.limit()`, a default `LIMIT 1000` is applied automatically to prevent accidental full-table scans:
+
+```java
+// No .limit() → auto LIMIT 1000
+List<Order> orders = ClickHouseQuery.select("user_id", "amount")
+    .from("orders")
+    .where("tenant_id").eq(tenantId)
+    .query(namedJdbc, Order.class);
+// → SQL: ... LIMIT :_limit (1000)
+
+// Explicit .limit() → your value
+    .limit(50)
+    .query(namedJdbc, Order.class);
+// → SQL: ... LIMIT :_limit (50)
+```
+
+> **Note:** `UNION ALL` queries are excluded from auto-limit. The default value is `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
