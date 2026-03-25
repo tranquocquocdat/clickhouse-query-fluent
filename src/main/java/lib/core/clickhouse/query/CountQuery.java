@@ -1,4 +1,4 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.query;
 
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 

@@ -1,4 +1,4 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.query;
 
 /**
  * Type-safe sort direction for ORDER BY clauses.

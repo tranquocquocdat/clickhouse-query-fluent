@@ -1,5 +1,7 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.query;
 
+
+import lib.core.clickhouse.expression.CH;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

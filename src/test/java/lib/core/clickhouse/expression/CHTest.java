@@ -1,5 +1,7 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.expression;
 
+
+import lib.core.clickhouse.query.ClickHouseQuery;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 

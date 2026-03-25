@@ -1,4 +1,4 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.expression;
 
 /**
  * Fluent column expression builder for ClickHouse queries.

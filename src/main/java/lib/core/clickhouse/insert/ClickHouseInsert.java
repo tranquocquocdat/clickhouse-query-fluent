@@ -1,4 +1,4 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.insert;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;

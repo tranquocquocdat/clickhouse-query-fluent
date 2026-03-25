@@ -53,7 +53,7 @@ dependencies { implementation 'lib.core:clickhouse-query-builder:1.0.0' }
 ### 1. Basic SELECT
 
 ```java
-import static lib.core.clickhouse.CH.*;
+import static lib.core.clickhouse.expression.CH.*;
 
 List<Item> items = ClickHouseQuery
     .select(col("user_id"), sum("amount").as("total"))
@@ -110,7 +110,7 @@ List<Item> items = ClickHouseQuery
 ### 4. CASE WHEN
 
 ```java
-import static lib.core.clickhouse.CH.*;
+import static lib.core.clickhouse.expression.CH.*;
 
 // String result values (auto-quoted)
 ClickHouseQuery.select(
@@ -206,7 +206,7 @@ ClickHouseQuery.select("*")
 ### 8. HAVING with Aggregates
 
 ```java
-import static lib.core.clickhouse.CH.*;
+import static lib.core.clickhouse.expression.CH.*;
 
 ClickHouseQuery.select("user_id", sum("amount").as("total"))
     .from("orders")
@@ -254,7 +254,7 @@ ClickHouseQuery.select("*")
 ### 11. Complex Query (Full Example)
 
 ```java
-import static lib.core.clickhouse.CH.*;
+import static lib.core.clickhouse.expression.CH.*;
 
 List<Report> report = ClickHouseQuery.select(
         col("u.name"),

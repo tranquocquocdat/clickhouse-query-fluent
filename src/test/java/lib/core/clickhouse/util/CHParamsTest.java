@@ -1,4 +1,4 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.util;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

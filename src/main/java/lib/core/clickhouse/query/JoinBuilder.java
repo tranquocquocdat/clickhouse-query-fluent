@@ -1,4 +1,5 @@
-package lib.core.clickhouse;
+package lib.core.clickhouse.query;
+
 
 /**
  * Fluent builder for JOIN conditions.
