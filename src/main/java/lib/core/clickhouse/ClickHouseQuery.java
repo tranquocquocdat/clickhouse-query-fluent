@@ -737,26 +737,34 @@ public final class ClickHouseQuery {
      * ORDER BY with safe direction validation (defaults to DESC for invalid values).
      * Supports multiple calls for multiple columns.
      *
+    /** Order by directions. */
+    public enum SortOrder {
+        ASC, DESC
+    }
+
+    /**
+     * ORDER BY with type-safe enum direction.
+     * Supports multiple calls for multiple columns.
+     *
      * <pre>{@code
-     * .orderBy("total", "DESC")
-     * .orderBy("user_id", "ASC")
+     * .orderBy("total", SortOrder.DESC)
+     * .orderBy("user_id", SortOrder.ASC)
      * // → ORDER BY total DESC, user_id ASC
      * }</pre>
      *
      * @param column    the column to order by
-     * @param direction "ASC" or "DESC" (case-insensitive, defaults to DESC)
+     * @param direction {@link SortOrder#ASC} or {@link SortOrder#DESC}
      * @return this query builder
      */
-    public ClickHouseQuery orderBy(String column, String direction) {
+    public ClickHouseQuery orderBy(String column, SortOrder direction) {
         advanceTo(Phase.ORDER_BY);
-        String safeDir = "ASC".equalsIgnoreCase(direction) ? "ASC" : "DESC";
-        this.orderByClauses.add(column + " " + safeDir);
+        this.orderByClauses.add(column + " " + direction.name());
         return this;
     }
 
     /** ORDER BY column ASC. */
     public ClickHouseQuery orderBy(String column) {
-        return orderBy(column, "ASC");
+        return orderBy(column, SortOrder.ASC);
     }
 
     // ── LIMIT / OFFSET ──────────────────────────────────────────────────

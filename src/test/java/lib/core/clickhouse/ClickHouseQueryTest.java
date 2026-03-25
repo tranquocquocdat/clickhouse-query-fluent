@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
+import lib.core.clickhouse.ClickHouseQuery.SortOrder;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -505,18 +507,6 @@ class ClickHouseQueryTest {
     class OrderByLimitTests {
 
         @Test
-        @DisplayName("ORDER BY defaults to DESC for invalid direction")
-        void orderByDefault() {
-            String sql = ClickHouseQuery
-                    .select("*")
-                    .from("t")
-                    .orderBy("created_at", "INVALID")
-                    .toSql();
-
-            assertTrue(sql.contains("ORDER BY created_at DESC"));
-        }
-
-        @Test
         @DisplayName("ORDER BY ASC")
         void orderByAsc() {
             String sql = ClickHouseQuery
@@ -629,7 +619,7 @@ class ClickHouseQueryTest {
                     .from("t")
                     .where("status").eq("ACTIVE")
                     .groupBy("user_id")
-                    .orderBy("user_id", "ASC")
+                    .orderBy("user_id", SortOrder.ASC)
                     .limit(10).offset(0)
                     .toSql()
             );
@@ -685,7 +675,7 @@ class ClickHouseQueryTest {
                 ClickHouseQuery
                     .select("*")
                     .from("t")
-                    .orderBy("id", "ASC")
+                    .orderBy("id", SortOrder.ASC)
                     .where("status").eq("ACTIVE")
             );
         }
@@ -903,7 +893,7 @@ class ClickHouseQueryTest {
                     .where("tenant_id").eq("op-1")
                     .where("status").eqIf(true, "ACTIVE")
                     .groupBy("user_id")
-                    .orderBy("total_bet", "DESC")
+                    .orderBy("total_bet", SortOrder.DESC)
                     .limit(10).offset(0)
                     .toSql();
 
@@ -953,7 +943,7 @@ class ClickHouseQueryTest {
                     .where("status").eqIfNotBlank("ACTIVE")
                     .whereILike("search").on("user_id", "round_id")
                     .groupBy("product_id")
-                    .orderBy("cnt", "DESC")
+                    .orderBy("cnt", SortOrder.DESC)
                     .limit(10).offset(0);
 
             String sql = q.toSql();
@@ -976,7 +966,7 @@ class ClickHouseQueryTest {
                     .where("t.tenant_id").eq("op-1")
                     .groupBy("u.name")
                     .having(CH.sum("t.amount")).gt(1000)
-                    .orderBy("total", "DESC")
+                    .orderBy("total", SortOrder.DESC)
                     .toSql();
 
             assertTrue(sql.contains("JOIN users u ON u.id = t.user_id"));
@@ -1039,8 +1029,8 @@ class ClickHouseQueryTest {
         void multipleOrderBy() {
             String sql = ClickHouseQuery.select("*")
                     .from("orders")
-                    .orderBy("total", "DESC")
-                    .orderBy("user_id", "ASC")
+                    .orderBy("total", SortOrder.DESC)
+                    .orderBy("user_id", SortOrder.ASC)
                     .toSql();
 
             assertTrue(sql.contains("ORDER BY total DESC, user_id ASC"));
@@ -1051,9 +1041,9 @@ class ClickHouseQueryTest {
         void threeColumns() {
             String sql = ClickHouseQuery.select("*")
                     .from("orders")
-                    .orderBy("created_at", "DESC")
-                    .orderBy("amount", "DESC")
-                    .orderBy("user_id", "ASC")
+                    .orderBy("created_at", SortOrder.DESC)
+                    .orderBy("amount", SortOrder.DESC)
+                    .orderBy("user_id", SortOrder.ASC)
                     .toSql();
 
             assertTrue(sql.contains("ORDER BY created_at DESC, amount DESC, user_id ASC"));
@@ -1064,7 +1054,7 @@ class ClickHouseQueryTest {
         void singleOrderBy() {
             String sql = ClickHouseQuery.select("*")
                     .from("orders")
-                    .orderBy("total", "DESC")
+                    .orderBy("total", SortOrder.DESC)
                     .toSql();
 
             assertTrue(sql.contains("ORDER BY total DESC"));

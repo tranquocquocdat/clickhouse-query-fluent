@@ -12,7 +12,7 @@ Fluent Java DSL for building ClickHouse SELECT & INSERT queries with Spring `Nam
 - ✅ **Conditional filters** — `.eqIfNotBlank()`, `.eqIf()` skip when value is empty
 - ✅ **LIKE / ILIKE search** — `.whereLike(keyword).on(...)` / `.whereILike(keyword).on(...)`
 - ✅ **Subquery count** — `ClickHouseQuery.count(subQuery).execute(jdbc)`
-- ✅ **Multiple ORDER BY** — `.orderBy("col1", "DESC").orderBy("col2", "ASC")`
+- ✅ **Multiple ORDER BY** — `.orderBy("col1", SortOrder.DESC).orderBy("col2", SortOrder.ASC)`
 - ✅ **Expression builder** — `CH.sum()`, `CH.count()`, `CH.avg()`, `CH.caseWhen()`
 
 ## Installation
@@ -64,7 +64,7 @@ List<Item> items = ClickHouseQuery
     .where("category_id").in(categoryIds)       // IN (list)
     .where("deleted_at").isNull()
     .groupBy("user_id")
-    .orderBy("total", "DESC")
+    .orderBy("total", SortOrder.DESC)
     .limit(10).offset(0)
     .query(namedJdbc, rowMapper);
 ```
@@ -80,7 +80,7 @@ List<Result> results = ClickHouseQuery
     .where("o.tenant_id").eq(tenantId)
     .groupBy("u.name")
     .having(sum("o.amount")).gt(1000)
-    .orderBy("total", "DESC")
+    .orderBy("total", SortOrder.DESC)
     .limit(20)
     .query(namedJdbc, rowMapper);
 
@@ -244,9 +244,9 @@ long total = ClickHouseQuery
 ```java
 ClickHouseQuery.select("*")
     .from("orders")
-    .orderBy("created_at", "DESC")
-    .orderBy("amount", "DESC")
-    .orderBy("user_id", "ASC")
+    .orderBy("created_at", SortOrder.DESC)
+    .orderBy("amount", SortOrder.DESC)
+    .orderBy("user_id", SortOrder.ASC)
     // → ORDER BY created_at DESC, amount DESC, user_id ASC
     .query(namedJdbc, rowMapper);
 ```
@@ -282,8 +282,8 @@ List<Report> report = ClickHouseQuery.select(
     .whereILike(keyword).on("u.name", "o.order_id")
     .groupBy("u.name")
     .having(sum("o.amount")).gt(1000)
-    .orderBy("total_revenue", "DESC")
-    .orderBy("order_count", "DESC")
+    .orderBy("total_revenue", SortOrder.DESC)
+    .orderBy("order_count", SortOrder.DESC)
     .limit(50).offset(0)
     .query(namedJdbc, rowMapper);
 ```
@@ -409,7 +409,7 @@ SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMI
 | | `.whereRaw("condition")` | Raw WHERE clause |
 | **GROUP BY** | `.groupBy("col1", "col2")` | Group by columns |
 | **HAVING** | `.having(sum("col")).gt(100)` | Aggregate filter |
-| **ORDER BY** | `.orderBy("col", "DESC")` | Sort (supports multiple calls) |
+| **ORDER BY** | `.orderBy("col", SortOrder.DESC)` | Sort (supports multiple calls) |
 | **LIMIT** | `.limit(10).offset(0)` | Pagination |
 | **Execute** | `.query(jdbc, mapper)` | Run and map results |
 | | `.queryForObject(jdbc, type)` | Single value |
