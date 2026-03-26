@@ -9,5 +9,16 @@ package lib.core.clickhouse.query;
  * }</pre>
  */
 public enum SortOrder {
-    ASC, DESC
+    ASC, DESC;
+
+    /**
+     * Parse a direction string ("ASC" / "DESC") case-insensitively.
+     * Defaults to {@link #DESC} if the value is null or unrecognised.
+     */
+    public static SortOrder of(String direction) {
+        if (direction != null && "ASC".equalsIgnoreCase(direction.trim())) {
+            return ASC;
+        }
+        return DESC;
+    }
 }
