@@ -263,6 +263,24 @@ public final class ClickHouseQuery {
     }
 
     /**
+     * FROM subquery with type-safe {@link Alias}.
+     *
+     * <pre>{@code
+     * Alias sub = Alias.of("sub");
+     * ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
+     *     .from(innerQuery, sub)
+     *     .where(sub.col("total")).gt(1000)
+     * }</pre>
+     *
+     * @param subQuery the inner query
+     * @param alias    the Alias for the subquery
+     * @return this query builder
+     */
+    public ClickHouseQuery from(ClickHouseQuery subQuery, Alias alias) {
+        return from(subQuery).as(alias.toString());
+    }
+
+    /**
      * Intermediate builder for setting subquery alias fluently.
      * <p>Usage: {@code .from(subQuery).as("alias")}
      */

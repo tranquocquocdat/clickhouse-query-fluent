@@ -454,19 +454,21 @@ ClickHouseQuery.select("user_id", sum("amount").as("total"))
 ### 13. Subquery FROM
 
 ```java
-ClickHouseQuery.select("user_id", "total")
+Alias sub = Alias.of("sub");
+
+ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
     .from(
         ClickHouseQuery.select("user_id", "sum(amount) AS total")
             .from("orders")
             .where("tenant_id").eq(tenantId)
-            .groupBy("user_id")
+            .groupBy("user_id"),
+        sub     // ← fluent: Alias as subquery alias
     )
-    .as("sub")
-    .where("total").gt(1000)
+    .where(sub.col("total")).gt(1000)
     .orderBy("total", SortOrder.DESC)
     .limit(10)
     .query(namedJdbc, Report.class);
-// → SELECT ... FROM (SELECT ... GROUP BY user_id) AS sub WHERE total > ...
+// → SELECT sub.user_id, sub.total FROM (SELECT ... GROUP BY user_id) AS sub WHERE sub.total > ...
 ```
 
 ### 14. UNION ALL
@@ -761,7 +763,7 @@ ClickHouseQuery.select("user_id")
 | **SELECT** | `.select(...)` | Start SELECT query |
 | | `.selectDistinct(...)` | Start SELECT DISTINCT |
 | **FROM** | `.from("table")` / `.from(alias)` | Set table |
-| | `.from(subQuery).as("alias")` | Subquery as table source |
+| | `.from(subQuery, alias)` / `.from(subQuery).as("alias")` | Subquery as table source |
 | **JOIN** | `.join(alias).on(a.col("id"), b.col("user_id"))` | INNER JOIN |
 | | `.leftJoin(alias).on(...)` | LEFT JOIN |
 | | `.rightJoin(alias).on(...)` | RIGHT JOIN |
