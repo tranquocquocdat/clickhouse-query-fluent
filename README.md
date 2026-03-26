@@ -71,7 +71,7 @@ page.hasNext();       // true
 | 4 | **Auto DTO mapping** | `.query(jdbc, MyDto.class)` maps `snake_case` → `camelCase` automatically |
 | 5 | **Single-query pagination** | `queryPage()` → `Page<T>` with data + total count in **one query** |
 | 6 | **Default LIMIT** | Auto `LIMIT 1000` safety guard when no explicit limit is set |
-| 7 | **Fluent JOIN** | `.join("t").on("left", "right")` / `.leftJoin()` / `.rightJoin()` |
+| 7 | **Fluent JOIN** | `.join(alias).on(a.col("id"), b.col("user_id"))` / `.leftJoin()` / `.rightJoin()` |
 | 8 | **Fluent OR** | `.whereOr(or -> or.where("col").eq(v).where("col2").gt(n))` — 13 operators |
 | 9 | **LIKE / ILIKE** | `.whereILike(kw).on("col1", "col2")` / `.onPrefix("col")` |
 | 10 | **Conditional filters** | `.eqIfNotBlank()`, `.eqIf()` skip when value is empty |
@@ -212,19 +212,23 @@ ClickHouseQuery.select(
 ### 3. Fluent JOIN
 
 ```java
+Alias orders   = Alias.of("orders").as("o");
+Alias users    = Alias.of("users").as("u");
+Alias products = Alias.of("products").as("p");
+
 ClickHouseQuery
-    .select("u.name", sum("o.amount").as("total"))
-    .from("orders o")
-    .join("users u").on("u.id", "o.user_id")
-    .leftJoin("products p").on("p.id", "o.product_id")
-    .where("o.tenant_id").eq(tenantId)
-    .groupBy("u.name")
-    .having(sum("o.amount")).gt(1000)
+    .select(users.col("name"), orders.sum("amount").as("total"))
+    .from(orders)
+    .join(users).on(users.col("id"), orders.col("user_id"))
+    .leftJoin(products).on(products.col("id"), orders.col("product_id"))
+    .where(orders.col("tenant_id")).eq(tenantId)
+    .groupBy(users.col("name"))
+    .having(orders.sum("amount")).gt(1000)
     .orderBy("total", SortOrder.DESC)
     .query(namedJdbc, Report.class);
 
 // Raw ON condition for complex cases:
-.join("users u").on("u.id = o.user_id AND u.active = 1")
+.join(users).on("u.id = o.user_id AND u.active = 1")
 ```
 
 ### 4. WHERE Operators
@@ -487,26 +491,32 @@ ClickHouseQuery.select("user_id", "amount").from("orders_2023")
 
 ```java
 // Single CTE
+Alias au = Alias.of("active_users").as("au");
+Alias o  = Alias.of("orders").as("o");
+
 ClickHouseQuery
     .with("active_users",
         ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
-    .select("au.user_id", "count(*) AS order_count")
-    .from("orders o")
-    .join("active_users au").on("au.user_id", "o.user_id")
-    .groupBy("au.user_id")
+    .select(au.col("user_id"), count().as("order_count"))
+    .from(au)
+    .join(o).on(au.col("user_id"), o.col("user_id"))
+    .groupBy(au.col("user_id"))
     .query(namedJdbc, Report.class);
 
 // Multiple CTEs
+Alias u = Alias.of("cte_users").as("u");
+Alias uo = Alias.of("cte_orders").as("uo");
+
 ClickHouseQuery
     .with("cte_users",
         ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
     .with("cte_orders",
         ClickHouseQuery.select("user_id", "sum(amount) AS total")
             .from("orders").groupBy("user_id"))
-    .select("u.user_id", "o.total")
-    .from("cte_users u")
-    .join("cte_orders o").on("o.user_id", "u.user_id")
-    .orderBy("o.total", SortOrder.DESC)
+    .select(u.col("user_id"), uo.col("total"))
+    .from(u)
+    .join(uo).on(uo.col("user_id"), u.col("user_id"))
+    .orderBy(uo.col("total"), SortOrder.DESC)
     .query(namedJdbc, Report.class);
 ```
 
@@ -752,9 +762,9 @@ ClickHouseQuery.select("user_id")
 | | `.selectDistinct(...)` | Start SELECT DISTINCT |
 | **FROM** | `.from("table")` / `.from(alias)` | Set table |
 | | `.from(subQuery).as("alias")` | Subquery as table source |
-| **JOIN** | `.join("t").on("left", "right")` | INNER JOIN |
-| | `.leftJoin("t").on(...)` | LEFT JOIN |
-| | `.rightJoin("t").on(...)` | RIGHT JOIN |
+| **JOIN** | `.join(alias).on(a.col("id"), b.col("user_id"))` | INNER JOIN |
+| | `.leftJoin(alias).on(...)` | LEFT JOIN |
+| | `.rightJoin(alias).on(...)` | RIGHT JOIN |
 | **WHERE** | `.where("col").eq/ne/gt/gte/lt/lte(val)` | Comparison operators |
 | | `.where("col").in(list)` / `.notIn(list)` | IN / NOT IN |
 | | `.where("col").in(subQuery)` / `.notIn(subQuery)` | Subquery IN |
