@@ -1,6 +1,7 @@
 package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.AggIfBuilder;
+import lib.core.clickhouse.expression.CaseConditionBuilder;
 import lib.core.clickhouse.expression.CH;
 
 /**
@@ -165,6 +166,16 @@ public final class Alias {
     /** {@code avgIf(alias.column, rawCondition)} */
     public CH.Expr avgIfRaw(String column, String condition) {
         return CH.avgIfRaw(c(column), condition);
+    }
+
+    // ── CASE WHEN ────────────────────────────────────────────────────────
+
+    /**
+     * Start a CASE WHEN with alias-prefixed column.
+     * <pre>{@code orders.caseWhen("amount").gt(5000).then("HIGH").orElse("LOW").as("tier")}</pre>
+     */
+    public CaseConditionBuilder caseWhen(String column) {
+        return CH.caseWhen(c(column));
     }
 
     /** Returns the alias prefix (e.g. {@code "o"}) */
