@@ -7,8 +7,8 @@ import lib.core.clickhouse.query.SortOrder;
  * Fluent builder for chaining additional JOIN ON conditions via {@code .and()}.
  *
  * <pre>{@code
- * .join(wt).on(st.c("user_id"), wt.c("user_id"))
- *          .and(st.c("spin_id"), wt.c("round_id"))
+ * .join(wt).on(st.col("user_id"), wt.col("user_id"))
+ *          .and(st.col("spin_id"), wt.col("round_id"))
  * }</pre>
  */
 public final class JoinOnBuilder {
@@ -65,5 +65,55 @@ public final class JoinOnBuilder {
     /** Get the underlying query (e.g. for passing as a parameter). */
     public ClickHouseQuery query() {
         return query;
+    }
+
+    /** Build the SQL string. */
+    public String toSql() {
+        return query.toSql();
+    }
+
+    /** Continue to another INNER JOIN. */
+    public JoinBuilder join(String table) {
+        return query.join(table);
+    }
+
+    /** Continue to another INNER JOIN (Alias). */
+    public JoinBuilder join(lib.core.clickhouse.query.Alias alias) {
+        return query.join(alias);
+    }
+
+    /** Continue to another LEFT JOIN. */
+    public JoinBuilder leftJoin(String table) {
+        return query.leftJoin(table);
+    }
+
+    /** Continue to another LEFT JOIN (Alias). */
+    public JoinBuilder leftJoin(lib.core.clickhouse.query.Alias alias) {
+        return query.leftJoin(alias);
+    }
+
+    /** Continue to another RIGHT JOIN. */
+    public JoinBuilder rightJoin(String table) {
+        return query.rightJoin(table);
+    }
+
+    /** Continue to another RIGHT JOIN (Alias). */
+    public JoinBuilder rightJoin(lib.core.clickhouse.query.Alias alias) {
+        return query.rightJoin(alias);
+    }
+
+    /** Expr-accepting overloads */
+    public JoinOnBuilder and(lib.core.clickhouse.expression.CH.Expr left, lib.core.clickhouse.expression.CH.Expr right) {
+        return and(left.toString(), right.toString());
+    }
+
+    public WhereBuilder where(lib.core.clickhouse.expression.CH.Expr column) {
+        return query.where(column.toString());
+    }
+
+    public ClickHouseQuery groupBy(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return query.groupBy(strs);
     }
 }

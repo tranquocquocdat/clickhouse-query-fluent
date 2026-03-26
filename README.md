@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Fluent Java DSL for building type-safe ClickHouse queries with Spring `NamedParameterJdbcTemplate`.
-Zero code-gen · Zero config · Null-safe · Auto DTO mapping.
+Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe `Expr` column references.
 
 ---
 
@@ -22,30 +22,30 @@ Page<OrderReport> page = ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
         orders.sum("amount").minus(orders.sum("cost")).as("net_profit"),   // arithmetic
-        countDistinct(orders.c("user_id"), orders.c("session_id")).as("unique_sessions"),
+        countDistinct(orders.col("user_id").toString(), orders.col("session_id").toString()).as("unique_sessions"),
         orders.sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
         orders.caseWhen("amount").gt(5000).then("HIGH")
             .when("amount").gt(1000).then("MEDIUM")
             .orElse("LOW").as("tier")
     )
     .from(orders)
-    .join(users).on(users.c("id"), orders.c("user_id"))
+    .join(users).on(users.col("id"), orders.col("user_id"))
 
     // Null-safe filters — null values are automatically skipped
-    .where(orders.c("tenant_id")).eq(tenantId)
-    .where(orders.c("created_at")).between(startDate, endDate)
-    .where(orders.c("status")).eqIfNotBlank(statusFilter)
+    .where(orders.col("tenant_id")).eq(tenantId)
+    .where(orders.col("created_at")).between(startDate, endDate)
+    .where(orders.col("status")).eqIfNotBlank(statusFilter)
 
     // Multi-column search
-    .whereILike(keyword).on(users.c("name"), orders.c("order_id"))
+    .whereILike(keyword).on(users.col("name"), orders.col("order_id"))
 
     // Complex OR groups
     .whereOr(or -> or
-        .where(users.c("type")).in(List.of("VIP", "PREMIUM"))
-        .where(orders.c("amount")).gt(10000)
+        .where(users.col("type")).in(List.of("VIP", "PREMIUM"))
+        .where(orders.col("amount")).gt(10000)
     )
 
-    .groupBy(users.c("name"))
+    .groupBy(users.col("name"))
     .having(sum("amount")).gt(1000)
     .orderBy("total_revenue", SortOrder.DESC)
     .queryPage(0, 20, namedJdbc, OrderReport.class);  // single-query pagination + auto DTO
@@ -57,7 +57,7 @@ page.getTotalPages(); // 229
 page.hasNext();       // true
 ```
 
-> **21 features** working together: Alias, JOIN, null-safe WHERE, ILIKE search, fluent OR, CASE WHEN, conditional aggregates (`sumIf`), HAVING, single-query pagination, auto DTO mapping, fluent arithmetic (`minus`/`plus`), multi-column `countDistinct` — all in one fluent chain.
+> **21 features** working together: Alias, JOIN, null-safe WHERE, ILIKE search, fluent OR, CASE WHEN, conditional aggregates (`sumIf`), HAVING, single-query pagination, auto DTO mapping, fluent arithmetic (`minus`/`plus`), multi-column `countDistinct`, type-safe `Expr` — all in one fluent chain.
 
 ---
 
@@ -84,7 +84,7 @@ page.hasNext();       // true
 | 17 | **Subquery FROM** | `.from(ClickHouseQuery.select(...)).as("alias")` |
 | 18 | **UNION ALL** | `.unionAll(ClickHouseQuery.select(...))` |
 | 19 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
-| 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.c("amount")` |
+| 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.col("amount")` |
 | 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
 
 ---
@@ -151,21 +151,21 @@ List<Order> orders = ClickHouseQuery
 Avoid hard-coded `"o."`, `"u."` prefix strings:
 
 ```java
-Alias orders = Alias.of("orders");     // orders.c("amount") → "orders.amount"
-Alias users  = Alias.of("users");      // users.c("name")    → "users.name"
+Alias orders = Alias.of("orders");     // orders.col("amount") → Expr("orders.amount")
+Alias users  = Alias.of("users");      // users.col("name")    → Expr("users.name")
 
 // With short alias:
-Alias o = Alias.of("orders").as("o");  // o.c("amount") → "o.amount"
+Alias o = Alias.of("orders").as("o");  // o.col("amount") → Expr("o.amount")
 
 ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
         orders.countDistinct("order_id").as("order_count")
     )
-    .from(orders)                                        // FROM orders
-    .join(users).on(users.c("id"), orders.c("user_id"))  // JOIN users ON ...
-    .where(orders.c("tenant_id")).eq(tenantId)
-    .groupBy(users.c("name"))
+    .from(orders)                                            // FROM orders
+    .join(users).on(users.col("id"), orders.col("user_id"))  // JOIN users ON ...
+    .where(orders.col("tenant_id")).eq(tenantId)
+    .groupBy(users.col("name"))
     .having(orders.sum("amount")).gt(1000)
     .query(namedJdbc, Report.class);
 ```
@@ -174,12 +174,11 @@ ClickHouseQuery.select(
 
 | Method | Return | Output |
 |---|---|---|
-| `orders.c("amount")` | `String` | `"orders.amount"` — for WHERE, JOIN, GROUP BY |
-| `orders.col("amount")` | `Expr` | `orders.amount` — supports `.as()`, `.minus()`, `.plus()` |
-| `orders.col("amount").as("bet")` | `String` | `orders.amount AS bet` |
-| `orders.col("bet").minus(orders.col("cost")).as("net")` | `String` | `orders.bet - orders.cost AS net` |
+| `orders.col("amount")` | `Expr` | `orders.amount` — for SELECT, WHERE, JOIN, GROUP BY |
+| `orders.col("amount").as("bet")` | `Expr` | `orders.amount AS bet` |
+| `orders.col("bet").minus(orders.col("cost")).as("net")` | `Expr` | `orders.bet - orders.cost AS net` |
 | `orders.sum("amount")` | `Expr` | `sum(orders.amount)` |
-| `orders.sum("bet").minus(orders.sum("cost")).as("net")` | `String` | `sum(orders.bet) - sum(orders.cost) AS net` |
+| `orders.sum("bet").minus(orders.sum("cost")).as("net")` | `Expr` | `sum(orders.bet) - sum(orders.cost) AS net` |
 | `orders.count("id")` | `Expr` | `count(orders.id)` |
 | `orders.countDistinct("id")` | `Expr` | `countDistinct(orders.id)` |
 | `orders.min("created_at")` | `Expr` | `min(orders.created_at)` |
@@ -190,25 +189,25 @@ ClickHouseQuery.select(
 | `orders.caseWhen("amount").gt(5000).then("HIGH")` | — | `CASE WHEN orders.amount > 5000 ...` |
 
 > [!TIP]
-> **`c()` vs `col()`:**
-> - `c("col")` → `String` — dùng cho WHERE, JOIN ON, GROUP BY, ORDER BY
-> - `col("col")` → `Expr` — dùng cho SELECT columns khi cần `.as()`, `.minus()`, `.plus()`
+> **`col()` returns `Expr`** — a type-safe wrapper. `Expr` is accepted directly by `select()`, `groupBy()`, `on()`, `where()`, etc. No `.toString()` needed.
+> `Expr.as("alias")` also returns `Expr`, so the entire chain stays type-safe.
+> `Expr.equals(String)` works for convenient assertion: `assertEquals(expr, "expected")`.
 
 > [!IMPORTANT]
-> **Khi có JOIN (≥ 2 bảng), luôn dùng `Alias.c()` cho TẤT CẢ column references:**
+> **Khi có JOIN (≥ 2 bảng), luôn dùng `Alias.col()` cho TẤT CẢ column references:**
 >
 > ```java
 > // ✅ Đúng — mọi column đều rõ bảng
-> .where(orders.c("status")).eq("ACTIVE")
-> .groupBy(users.c("name"))
-> .orderBy(orders.c("amount"), SortOrder.DESC)
+> .where(orders.col("status")).eq("ACTIVE")
+> .groupBy(users.col("name"))
+> .orderBy(orders.col("amount"), SortOrder.DESC)
 >
 > // ❌ Sai — ClickHouse báo "ambiguous column"
 > .where("status").eq("ACTIVE")      // status từ bảng nào?
 > .groupBy("name")                   // name từ bảng nào?
 > ```
 >
-> **Quy tắc:** Đơn bảng → tùy chọn. JOIN → **bắt buộc** dùng `alias.c("col")`, `alias.sum("col")`, `alias.caseWhen("col")`, v.v.
+> **Quy tắc:** Đơn bảng → tùy chọn. JOIN → **bắt buộc** dùng `alias.col("col")`, `alias.sum("col")`, `alias.caseWhen("col")`, v.v.
 
 ### 3. Fluent JOIN
 
@@ -407,7 +406,7 @@ import static lib.core.clickhouse.expression.CH.*;
 
 Alias st = Alias.of("spin_transactions");
 
-countDistinct(st.c("user_id"), st.c("session_id")).as("total_sessions")
+countDistinct(st.col("user_id").toString(), st.col("session_id").toString()).as("total_sessions")
 // → count(DISTINCT (spin_transactions.user_id, spin_transactions.session_id)) AS total_sessions
 ```
 

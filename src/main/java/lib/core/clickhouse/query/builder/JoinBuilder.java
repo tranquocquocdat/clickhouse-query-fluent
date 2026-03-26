@@ -57,5 +57,12 @@ public final class JoinBuilder {
         query.joinClauses.add(joinType + " " + table + " ON " + condition);
         return query;
     }
+
+    /**
+     * Expr-accepting overload for type-safe column references.
+     */
+    public JoinOnBuilder on(lib.core.clickhouse.expression.CH.Expr leftColumn, lib.core.clickhouse.expression.CH.Expr rightColumn) {
+        return on(leftColumn.toString(), rightColumn.toString());
+    }
 }
 

@@ -13,17 +13,17 @@ import lib.core.clickhouse.expression.CH;
  * Alias users  = Alias.of("users");
  *
  * ClickHouseQuery.select(users.col("name"), orders.sum("amount").as("total"))
- *     .from(orders)                                       // FROM orders
- *     .join(users).on(users.c("id"), orders.c("user_id")) // JOIN users ON ...
- *     .where(orders.c("tenant_id")).eq(tenantId)
+ *     .from(orders)                                             // FROM orders
+ *     .join(users).on(users.col("id"), orders.col("user_id"))   // JOIN users ON ...
+ *     .where(orders.col("tenant_id")).eq(tenantId)
  *
  * // Short alias — when you want o.amount instead of orders.amount
  * Alias o = Alias.of("orders").as("o");
  * Alias u = Alias.of("users").as("u");
  *
  * ClickHouseQuery.select(u.col("name"), o.sum("amount").as("total"))
- *     .from(o)                                    // FROM orders o
- *     .join(u).on(u.c("id"), o.c("user_id"))      // JOIN users u ON ...
+ *     .from(o)                                          // FROM orders o
+ *     .join(u).on(u.col("id"), o.col("user_id"))        // JOIN users u ON ...
  * }</pre>
  */
 public final class Alias {
@@ -68,13 +68,13 @@ public final class Alias {
     }
 
     /**
-     * Prefix a column name with this alias.
-     * {@code o.c("amount")} → {@code "o.amount"}
+     * Prefix a column name with this alias (internal use).
+     * {@code qualified("amount")} → {@code "o.amount"}
      *
      * @param column the column name
      * @return the fully-qualified column string
      */
-    public String c(String column) {
+    private String c(String column) {
         return alias + "." + column;
     }
 

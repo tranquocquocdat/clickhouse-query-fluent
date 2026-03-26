@@ -1620,38 +1620,38 @@ class ClickHouseQueryTest {
         void aliasSimple() {
             Alias orders = Alias.of("orders");
             assertEquals("orders", orders.ref());
-            assertEquals("orders.amount", orders.c("amount"));
+            assertEquals(orders.col("amount"), "orders.amount");
             assertEquals("orders", orders.toString());
         }
 
         @Test
-        @DisplayName("Alias.c() prefixes column name")
+        @DisplayName("Alias.col() prefixes column name")
         void aliasPrefixesColumn() {
             Alias o = Alias.of("orders").as("o");
-            assertEquals("o.amount", o.c("amount"));
-            assertEquals("o.created_at", o.c("created_at"));
+            assertEquals(o.col("amount"), "o.amount");
+            assertEquals(o.col("created_at"), "o.created_at");
         }
 
         @Test
         @DisplayName("Alias expression shortcuts")
         void aliasExpressionShortcuts() {
             Alias o = Alias.of("orders").as("o");
-            assertEquals("sum(o.amount)", o.sum("amount").toString());
-            assertEquals("count(o.id)", o.count("id").toString());
-            assertEquals("countDistinct(o.user_id)", o.countDistinct("user_id").toString());
-            assertEquals("min(o.created_at)", o.min("created_at").toString());
-            assertEquals("max(o.created_at)", o.max("created_at").toString());
-            assertEquals("avg(o.score)", o.avg("score").toString());
+            assertEquals(o.sum("amount"), "sum(o.amount)");
+            assertEquals(o.count("id"), "count(o.id)");
+            assertEquals(o.countDistinct("user_id"), "countDistinct(o.user_id)");
+            assertEquals(o.min("created_at"), "min(o.created_at)");
+            assertEquals(o.max("created_at"), "max(o.created_at)");
+            assertEquals(o.avg("score"), "avg(o.score)");
         }
 
         @Test
         @DisplayName("Alias conditional aggregate shortcuts")
         void aliasConditionalAggregates() {
             Alias o = Alias.of("orders").as("o");
-            assertEquals("sumIf(o.amount, status = 'ACTIVE')",
-                    o.sumIfRaw("amount", "status = 'ACTIVE'").toString());
-            assertEquals("countIf(o.id, type = 'SALE')",
-                    o.countIfRaw("id", "type = 'SALE'").toString());
+            assertEquals(o.sumIfRaw("amount", "status = 'ACTIVE'"),
+                    "sumIf(o.amount, status = 'ACTIVE')");
+            assertEquals(o.countIfRaw("id", "type = 'SALE'"),
+                    "countIf(o.id, type = 'SALE')");
         }
 
         @Test
@@ -1663,14 +1663,14 @@ class ClickHouseQueryTest {
 
             String sql = ClickHouseQuery.select(
                         u.col("name"),
-                        o.sum("amount").as("total_revenue").toString()
+                        o.sum("amount").as("total_revenue")
                     )
-                    .from(o)                                    // FROM orders o
-                    .join(u).on(u.c("id"), o.c("user_id"))      // JOIN users u
-                    .leftJoin(p).on(p.c("id"), o.c("product_id"))// LEFT JOIN products p
-                    .where(o.c("tenant_id")).eq("op-1")
-                    .where(o.c("status")).eq("ACTIVE")
-                    .groupBy(u.c("name"))
+                    .from(o)                                        // FROM orders o
+                    .join(u).on(u.col("id"), o.col("user_id"))      // JOIN users u
+                    .leftJoin(p).on(p.col("id"), o.col("product_id"))// LEFT JOIN products p
+                    .where(o.col("tenant_id")).eq("op-1")
+                    .where(o.col("status")).eq("ACTIVE")
+                    .groupBy(u.col("name"))
                     .orderBy("total_revenue", SortOrder.DESC)
                     .limit(10)
                     .toSql();
@@ -1690,11 +1690,11 @@ class ClickHouseQueryTest {
 
             String sql = ClickHouseQuery.select(
                         users.col("name"),
-                        orders.sum("amount").as("total").toString()
+                        orders.sum("amount").as("total")
                     )
                     .from(orders)
-                    .join(users).on(users.c("id"), orders.c("user_id"))
-                    .where(orders.c("status")).eq("ACTIVE")
+                    .join(users).on(users.col("id"), orders.col("user_id"))
+                    .where(orders.col("status")).eq("ACTIVE")
                     .toSql();
 
             assertTrue(sql.contains("FROM orders"));

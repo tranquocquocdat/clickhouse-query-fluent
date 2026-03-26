@@ -36,8 +36,8 @@ public final class CH {
         }
 
         /** Add an alias: {@code expression AS alias} */
-        public String as(String alias) {
-            return expression + " AS " + alias;
+        public Expr as(String alias) {
+            return new Expr(expression + " AS " + alias);
         }
 
         /** Subtract: {@code expr1 - expr2} */
@@ -64,6 +64,19 @@ public final class CH {
         @Override
         public String toString() {
             return expression;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o instanceof Expr) return expression.equals(((Expr) o).expression);
+            if (o instanceof String) return expression.equals(o);
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return expression.hashCode();
         }
     }
 

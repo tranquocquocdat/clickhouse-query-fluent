@@ -141,6 +141,15 @@ public final class ClickHouseQuery {
     }
 
     /**
+     * Start a SELECT query accepting {@link CH.Expr} or String values.
+     */
+    public static ClickHouseQuery select(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return select(strs);
+    }
+
+    /**
      * Start a SELECT DISTINCT query.
      *
      * @param columns column names or expressions
@@ -151,6 +160,15 @@ public final class ClickHouseQuery {
         q.distinct = true;
         q.selectColumns.addAll(List.of(columns));
         return q;
+    }
+
+    /**
+     * Start a SELECT DISTINCT query accepting {@link CH.Expr} or String values.
+     */
+    public static ClickHouseQuery selectDistinct(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return selectDistinct(strs);
     }
 
     /** Start a raw SELECT query (e.g., building from scratch). */
@@ -341,6 +359,16 @@ public final class ClickHouseQuery {
     }
 
     /**
+     * Start a fluent WHERE clause using a type-safe {@link CH.Expr}.
+     * <pre>{@code
+     * .where(alias.col("tenant_id")).eq(tenantId)
+     * }</pre>
+     */
+    public WhereBuilder where(CH.Expr column) {
+        return where(column.toString());
+    }
+
+    /**
      * Start a fluent ILIKE search across multiple columns.
      * <pre>{@code
      * .whereILike(keyword).on("session_id", "user_id")
@@ -418,6 +446,15 @@ public final class ClickHouseQuery {
         advanceTo(Phase.GROUP_BY);
         this.groupByColumns.addAll(List.of(columns));
         return this;
+    }
+
+    /**
+     * GROUP BY accepting {@link CH.Expr} or String values.
+     */
+    public ClickHouseQuery groupBy(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return groupBy(strs);
     }
 
     // ── HAVING (fluent) ──────────────────────────────────────────────────
