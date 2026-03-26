@@ -22,7 +22,7 @@ Page<OrderReport> page = ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
         orders.countDistinct("order_id").as("order_count"),
-        sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
+        orders.sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
         caseWhen("amount").gt(5000).then("HIGH")
             .when("amount").gt(1000).then("MEDIUM")
             .orElse("LOW").as("tier")
