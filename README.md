@@ -454,15 +454,16 @@ ClickHouseQuery.select("user_id", sum("amount").as("total"))
 ### 13. Subquery FROM
 
 ```java
-Alias sub = Alias.of("sub");
+Alias sub    = Alias.of("sub");
+Alias orders = Alias.of("orders");
 
 ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
     .from(
         ClickHouseQuery.select(col("user_id"), sum("amount").as("total"))
-            .from("orders")
-            .where("tenant_id").eq(tenantId)
+            .from(orders)
+            .where(orders.col("tenant_id")).eq(tenantId)
             .groupBy("user_id"),
-        sub     // ← fluent: Alias as subquery alias
+        sub
     )
     .where(sub.col("total")).gt(1000)
     .orderBy("total", SortOrder.DESC)
