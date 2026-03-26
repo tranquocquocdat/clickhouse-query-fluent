@@ -181,6 +181,23 @@ ClickHouseQuery.select(
 | `orders.avg("score")` | `avg(orders.score)` |
 | `orders.sumIf("amount").where("status").eq("ACTIVE")` | `sumIf(orders.amount, status = 'ACTIVE')` |
 | `orders.sumIfRaw("amount", "cond")` | `sumIf(orders.amount, cond)` |
+| `orders.caseWhen("amount").gt(5000).then("HIGH")` | `CASE WHEN orders.amount > 5000 ...` |
+
+> [!IMPORTANT]
+> **Khi có JOIN (≥ 2 bảng), luôn dùng `Alias.c()` cho TẤT CẢ column references:**
+>
+> ```java
+> // ✅ Đúng — mọi column đều rõ bảng
+> .where(orders.c("status")).eq("ACTIVE")
+> .groupBy(users.c("name"))
+> .orderBy(orders.c("amount"), SortOrder.DESC)
+>
+> // ❌ Sai — ClickHouse báo "ambiguous column"
+> .where("status").eq("ACTIVE")      // status từ bảng nào?
+> .groupBy("name")                   // name từ bảng nào?
+> ```
+>
+> **Quy tắc:** Đơn bảng → tùy chọn. JOIN → **bắt buộc** dùng `alias.c("col")`, `alias.sum("col")`, `alias.caseWhen("col")`, v.v.
 
 ### 3. Fluent JOIN
 
