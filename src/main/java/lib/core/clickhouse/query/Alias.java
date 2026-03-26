@@ -1,5 +1,6 @@
 package lib.core.clickhouse.query;
 
+import lib.core.clickhouse.expression.AggIfBuilder;
 import lib.core.clickhouse.expression.CH;
 
 /**
@@ -116,29 +117,54 @@ public final class Alias {
         return CH.avg(c(column));
     }
 
-    /** {@code sumIf(alias.column, condition)} */
-    public CH.Expr sumIf(String column, String condition) {
-        return CH.sumIf(c(column), condition);
+    /** Fluent: {@code sumIf(alias.column).where("status").eq("COMPLETED")} */
+    public AggIfBuilder sumIf(String column) {
+        return CH.sumIf(c(column));
     }
 
-    /** {@code countIf(alias.column, condition)} */
-    public CH.Expr countIf(String column, String condition) {
-        return CH.countIf(c(column), condition);
+    /** Fluent: {@code countIf(alias.column).where("type").eq("VIP")} */
+    public AggIfBuilder countIf(String column) {
+        return CH.countIf(c(column));
     }
 
-    /** {@code minIf(alias.column, condition)} */
-    public CH.Expr minIf(String column, String condition) {
-        return CH.minIf(c(column), condition);
+    /** Fluent: {@code minIf(alias.column).where("type").eq("SALE")} */
+    public AggIfBuilder minIf(String column) {
+        return CH.minIf(c(column));
     }
 
-    /** {@code maxIf(alias.column, condition)} */
-    public CH.Expr maxIf(String column, String condition) {
-        return CH.maxIf(c(column), condition);
+    /** Fluent: {@code maxIf(alias.column).where("type").eq("SALE")} */
+    public AggIfBuilder maxIf(String column) {
+        return CH.maxIf(c(column));
     }
 
-    /** {@code avgIf(alias.column, condition)} */
-    public CH.Expr avgIf(String column, String condition) {
-        return CH.avgIf(c(column), condition);
+    /** Fluent: {@code avgIf(alias.column).where("status").eq("DONE")} */
+    public AggIfBuilder avgIf(String column) {
+        return CH.avgIf(c(column));
+    }
+
+    /** {@code sumIf(alias.column, rawCondition)} */
+    public CH.Expr sumIfRaw(String column, String condition) {
+        return CH.sumIfRaw(c(column), condition);
+    }
+
+    /** {@code countIf(alias.column, rawCondition)} */
+    public CH.Expr countIfRaw(String column, String condition) {
+        return CH.countIfRaw(c(column), condition);
+    }
+
+    /** {@code minIf(alias.column, rawCondition)} */
+    public CH.Expr minIfRaw(String column, String condition) {
+        return CH.minIfRaw(c(column), condition);
+    }
+
+    /** {@code maxIf(alias.column, rawCondition)} */
+    public CH.Expr maxIfRaw(String column, String condition) {
+        return CH.maxIfRaw(c(column), condition);
+    }
+
+    /** {@code avgIf(alias.column, rawCondition)} */
+    public CH.Expr avgIfRaw(String column, String condition) {
+        return CH.avgIfRaw(c(column), condition);
     }
 
     /** Returns the alias prefix (e.g. {@code "o"}) */

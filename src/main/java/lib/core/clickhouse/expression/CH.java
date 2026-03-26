@@ -67,28 +67,57 @@ public final class CH {
         return new Expr("sum(" + column + ")");
     }
 
-    /** {@code sumIf(column, condition)} */
-    public static Expr sumIf(String column, String condition) {
+    // ── Conditional aggregates (fluent) ────────────────────────────────
+
+    /** Fluent sumIf: {@code sumIf("amount").where("status").eq("COMPLETED")} */
+    public static AggIfBuilder sumIf(String column) {
+        return new AggIfBuilder("sumIf", column);
+    }
+
+    /** Fluent countIf: {@code countIf("user_id").where("type").eq("VIP")} */
+    public static AggIfBuilder countIf(String column) {
+        return new AggIfBuilder("countIf", column);
+    }
+
+    /** Fluent minIf: {@code minIf("amount").where("type").eq("SALE")} */
+    public static AggIfBuilder minIf(String column) {
+        return new AggIfBuilder("minIf", column);
+    }
+
+    /** Fluent maxIf: {@code maxIf("amount").where("type").eq("SALE")} */
+    public static AggIfBuilder maxIf(String column) {
+        return new AggIfBuilder("maxIf", column);
+    }
+
+    /** Fluent avgIf: {@code avgIf("score").where("status").eq("DONE")} */
+    public static AggIfBuilder avgIf(String column) {
+        return new AggIfBuilder("avgIf", column);
+    }
+
+    // ── Conditional aggregates (raw condition) ───────────────────────
+
+    /** {@code sumIf(column, rawCondition)} */
+    public static Expr sumIfRaw(String column, String condition) {
         return new Expr("sumIf(" + column + ", " + condition + ")");
     }
 
-    /** {@code countIf(column, condition)} */
-    public static Expr countIf(String column, String condition) {
+    /** {@code countIf(column, rawCondition)} */
+    public static Expr countIfRaw(String column, String condition) {
         return new Expr("countIf(" + column + ", " + condition + ")");
     }
 
-    /** {@code minIf(column, condition)} */
-    public static Expr minIf(String column, String condition) {
+    /** {@code minIf(column, rawCondition)} */
+    public static Expr minIfRaw(String column, String condition) {
         return new Expr("minIf(" + column + ", " + condition + ")");
     }
 
-    /** {@code maxIf(column, condition)} */
-    public static Expr maxIf(String column, String condition) {
+    /** {@code maxIf(column, rawCondition)} */
+    public static Expr maxIfRaw(String column, String condition) {
         return new Expr("maxIf(" + column + ", " + condition + ")");
     }
 
-    /** {@code avgIf(column, condition)} */
-    public static Expr avgIf(String column, String condition) {
+    /** {@code avgIf(column, rawCondition)} */
+    public static Expr avgIfRaw(String column, String condition) {
         return new Expr("avgIf(" + column + ", " + condition + ")");
     }
 

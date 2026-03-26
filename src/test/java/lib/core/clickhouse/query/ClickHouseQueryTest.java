@@ -1649,9 +1649,9 @@ class ClickHouseQueryTest {
         void aliasConditionalAggregates() {
             Alias o = Alias.of("orders", "o");
             assertEquals("sumIf(o.amount, status = 'ACTIVE')",
-                    o.sumIf("amount", "status = 'ACTIVE'").toString());
+                    o.sumIfRaw("amount", "status = 'ACTIVE'").toString());
             assertEquals("countIf(o.id, type = 'SALE')",
-                    o.countIf("id", "type = 'SALE'").toString());
+                    o.countIfRaw("id", "type = 'SALE'").toString());
         }
 
         @Test

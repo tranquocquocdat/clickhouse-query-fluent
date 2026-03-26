@@ -22,7 +22,7 @@ Page<OrderReport> page = ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
         orders.countDistinct("order_id").as("order_count"),
-        sumIf("amount", "status = 'COMPLETED'").as("completed_revenue"),
+        sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
         caseWhen("amount").gt(5000).then("HIGH")
             .when("amount").gt(1000).then("MEDIUM")
             .orElse("LOW").as("tier")
@@ -179,7 +179,8 @@ ClickHouseQuery.select(
 | `orders.min("created_at")` | `min(orders.created_at)` |
 | `orders.max("created_at")` | `max(orders.created_at)` |
 | `orders.avg("score")` | `avg(orders.score)` |
-| `orders.sumIf("amount", "cond")` | `sumIf(orders.amount, cond)` |
+| `orders.sumIf("amount").where("status").eq("ACTIVE")` | `sumIf(orders.amount, status = 'ACTIVE')` |
+| `orders.sumIfRaw("amount", "cond")` | `sumIf(orders.amount, cond)` |
 
 ### 3. Fluent JOIN
 
@@ -349,18 +350,27 @@ caseWhen("role").eq("ADMIN").then("YES")
 
 ### 9. Expression Builder & Conditional Aggregates
 
+**Fluent (recommended):**
+
 ```java
 import static lib.core.clickhouse.expression.CH.*;
 
 ClickHouseQuery.select(
     col("product_id"),
-    sumIf("amount", "action = 'BET'").as("total_bet"),
-    countIf("user_id", "status = 'ACTIVE'").as("active_count"),
-    minIf("amount", "type = 'SALE'").as("min_sale"),
-    maxIf("amount", "type = 'SALE'").as("max_sale"),
-    avgIf("score", "status = 'COMPLETED'").as("avg_score"),
-    countIf("user_id", in("status", "VIP", "PREMIUM")).as("premium_count")
+    sumIf("amount").where("action").eq("BET").as("total_bet"),
+    countIf("user_id").where("status").eq("ACTIVE").as("active_count"),
+    minIf("amount").where("type").eq("SALE").as("min_sale"),
+    maxIf("amount").where("score").gt(100).as("max_sale"),
+    avgIf("score").where("status").isNotNull().as("avg_score"),
+    countIf("user_id").where("status").in("VIP", "PREMIUM").as("premium_count")
 ).from("orders").groupBy("product_id");
+```
+
+**Raw (explicit):**
+
+```java
+sumIfRaw("amount", "action = 'BET'").as("total_bet")
+countIfRaw("user_id", in("status", "VIP", "PREMIUM")).as("premium_count")
 ```
 
 ### 10. HAVING with Aggregates
@@ -615,11 +625,16 @@ ClickHouseQuery.select("user_id")
 | `min("col")` | `min(col)` |
 | `max("col")` | `max(col)` |
 | `avg("col")` | `avg(col)` |
-| `sumIf("col", "cond")` | `sumIf(col, cond)` |
-| `countIf("col", "cond")` | `countIf(col, cond)` |
-| `minIf("col", "cond")` | `minIf(col, cond)` |
-| `maxIf("col", "cond")` | `maxIf(col, cond)` |
-| `avgIf("col", "cond")` | `avgIf(col, cond)` |
+| `sumIf("col").where("c").eq(v)` | `sumIf(col, c = 'v')` — **fluent** |
+| `countIf("col").where("c").in(...)` | `countIf(col, c IN (...))` — **fluent** |
+| `minIf("col").where("c").gt(v)` | `minIf(col, c > v)` — **fluent** |
+| `maxIf("col").where("c").lt(v)` | `maxIf(col, c < v)` — **fluent** |
+| `avgIf("col").where("c").isNotNull()` | `avgIf(col, c IS NOT NULL)` — **fluent** |
+| `sumIfRaw("col", "cond")` | `sumIf(col, cond)` — **raw** |
+| `countIfRaw("col", "cond")` | `countIf(col, cond)` — **raw** |
+| `minIfRaw("col", "cond")` | `minIf(col, cond)` — **raw** |
+| `maxIfRaw("col", "cond")` | `maxIf(col, cond)` — **raw** |
+| `avgIfRaw("col", "cond")` | `avgIf(col, cond)` — **raw** |
 | `in("col", "v1", "v2")` | `col IN ('v1','v2')` |
 | `.as("alias")` | `... AS alias` |
 

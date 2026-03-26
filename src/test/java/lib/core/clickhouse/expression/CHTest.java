@@ -38,17 +38,38 @@ class CHTest {
     }
 
     @Test
-    @DisplayName("sumIf().as() generates sumIf(column, condition) AS alias")
-    void sumIf() {
+    @DisplayName("sumIfRaw().as() generates sumIf(column, condition) AS alias")
+    void sumIfRaw() {
         assertEquals("sumIf(amount, action = 'BET') AS total_bet",
-                CH.sumIf("amount", "action = 'BET'").as("total_bet"));
+                CH.sumIfRaw("amount", "action = 'BET'").as("total_bet"));
     }
 
     @Test
-    @DisplayName("sumIf with in() generates correct nested expression")
-    void sumIfWithIn() {
-        String result = CH.sumIf("amount", CH.in("action", "RESULT", "JACKPOT_WIN")).as("total_win");
+    @DisplayName("sumIfRaw with in() generates correct nested expression")
+    void sumIfRawWithIn() {
+        String result = CH.sumIfRaw("amount", CH.in("action", "RESULT", "JACKPOT_WIN")).as("total_win");
         assertEquals("sumIf(amount, action IN ('RESULT','JACKPOT_WIN')) AS total_win", result);
+    }
+
+    @Test
+    @DisplayName("fluent sumIf().where().eq() generates sumIf(column, col = 'val')")
+    void sumIfFluent() {
+        assertEquals("sumIf(amount, status = 'COMPLETED') AS completed_revenue",
+                CH.sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"));
+    }
+
+    @Test
+    @DisplayName("fluent sumIf().where().in() generates sumIf(column, col IN (...))")
+    void sumIfFluentIn() {
+        assertEquals("sumIf(amount, action IN ('SALE','UPSELL')) AS total_sales",
+                CH.sumIf("amount").where("action").in("SALE", "UPSELL").as("total_sales"));
+    }
+
+    @Test
+    @DisplayName("fluent sumIf().where().gt() generates sumIf(column, col > val)")
+    void sumIfFluentGt() {
+        assertEquals("sumIf(amount, score > 100) AS high_amount",
+                CH.sumIf("amount").where("score").gt(100).as("high_amount"));
     }
 
     @Test
@@ -239,50 +260,99 @@ class CHTest {
     // ── Conditional Aggregates ────────────────────────────────────────────
 
     @Test
-    @DisplayName("countIf() generates countIf(column, condition)")
-    void countIf() {
+    @DisplayName("countIfRaw() generates countIf(column, condition)")
+    void countIfRaw() {
         assertEquals("countIf(user_id, status = 'ACTIVE') AS active_users",
-                CH.countIf("user_id", "status = 'ACTIVE'").as("active_users"));
+                CH.countIfRaw("user_id", "status = 'ACTIVE'").as("active_users"));
     }
 
     @Test
-    @DisplayName("minIf() generates minIf(column, condition)")
-    void minIf() {
+    @DisplayName("minIfRaw() generates minIf(column, condition)")
+    void minIfRaw() {
         assertEquals("minIf(amount, type = 'SALE') AS min_sale",
-                CH.minIf("amount", "type = 'SALE'").as("min_sale"));
+                CH.minIfRaw("amount", "type = 'SALE'").as("min_sale"));
     }
 
     @Test
-    @DisplayName("maxIf() generates maxIf(column, condition)")
-    void maxIf() {
+    @DisplayName("maxIfRaw() generates maxIf(column, condition)")
+    void maxIfRaw() {
         assertEquals("maxIf(amount, type = 'SALE') AS max_sale",
-                CH.maxIf("amount", "type = 'SALE'").as("max_sale"));
+                CH.maxIfRaw("amount", "type = 'SALE'").as("max_sale"));
     }
 
     @Test
-    @DisplayName("avgIf() generates avgIf(column, condition)")
-    void avgIf() {
+    @DisplayName("avgIfRaw() generates avgIf(column, condition)")
+    void avgIfRaw() {
         assertEquals("avgIf(score, status = 'COMPLETED') AS avg_score",
-                CH.avgIf("score", "status = 'COMPLETED'").as("avg_score"));
+                CH.avgIfRaw("score", "status = 'COMPLETED'").as("avg_score"));
     }
 
     @Test
-    @DisplayName("countIf with CH.in() condition")
-    void countIfWithIn() {
-        String result = CH.countIf("user_id", CH.in("status", "ACTIVE", "VIP")).as("vip_count");
+    @DisplayName("countIfRaw with CH.in() condition")
+    void countIfRawWithIn() {
+        String result = CH.countIfRaw("user_id", CH.in("status", "ACTIVE", "VIP")).as("vip_count");
         assertEquals("countIf(user_id, status IN ('ACTIVE','VIP')) AS vip_count", result);
     }
 
     @Test
-    @DisplayName("Conditional aggregates in ClickHouseQuery.select()")
-    void conditionalAggregatesInQuery() {
+    @DisplayName("Conditional aggregates (raw) in ClickHouseQuery.select()")
+    void conditionalAggregatesRawInQuery() {
         String sql = ClickHouseQuery.select(
                 CH.col("product_id"),
-                CH.sumIf("amount", "action = 'BET'").as("total_bet"),
-                CH.countIf("user_id", "status = 'ACTIVE'").as("active_count"),
-                CH.minIf("amount", "type = 'SALE'").as("min_sale"),
-                CH.maxIf("amount", "type = 'SALE'").as("max_sale"),
-                CH.avgIf("score", "status = 'DONE'").as("avg_score")
+                CH.sumIfRaw("amount", "action = 'BET'").as("total_bet"),
+                CH.countIfRaw("user_id", "status = 'ACTIVE'").as("active_count"),
+                CH.minIfRaw("amount", "type = 'SALE'").as("min_sale"),
+                CH.maxIfRaw("amount", "type = 'SALE'").as("max_sale"),
+                CH.avgIfRaw("score", "status = 'DONE'").as("avg_score")
+        ).from("orders").groupBy("product_id").toSql();
+
+        assertTrue(sql.contains("sumIf(amount, action = 'BET') AS total_bet"));
+        assertTrue(sql.contains("countIf(user_id, status = 'ACTIVE') AS active_count"));
+        assertTrue(sql.contains("minIf(amount, type = 'SALE') AS min_sale"));
+        assertTrue(sql.contains("maxIf(amount, type = 'SALE') AS max_sale"));
+        assertTrue(sql.contains("avgIf(score, status = 'DONE') AS avg_score"));
+    }
+
+    // ── Fluent Conditional Aggregates ─────────────────────────────────────
+
+    @Test
+    @DisplayName("fluent countIf().where().eq()")
+    void countIfFluent() {
+        assertEquals("countIf(user_id, type = 'VIP') AS vip_count",
+                CH.countIf("user_id").where("type").eq("VIP").as("vip_count"));
+    }
+
+    @Test
+    @DisplayName("fluent minIf().where().eq()")
+    void minIfFluent() {
+        assertEquals("minIf(amount, type = 'SALE') AS min_sale",
+                CH.minIf("amount").where("type").eq("SALE").as("min_sale"));
+    }
+
+    @Test
+    @DisplayName("fluent maxIf().where().gt()")
+    void maxIfFluent() {
+        assertEquals("maxIf(amount, score > 50) AS max_amount",
+                CH.maxIf("amount").where("score").gt(50).as("max_amount"));
+    }
+
+    @Test
+    @DisplayName("fluent avgIf().where().isNotNull()")
+    void avgIfFluent() {
+        assertEquals("avgIf(score, status IS NOT NULL) AS avg_score",
+                CH.avgIf("score").where("status").isNotNull().as("avg_score"));
+    }
+
+    @Test
+    @DisplayName("fluent conditional aggregates in ClickHouseQuery.select()")
+    void conditionalAggregatesFluentInQuery() {
+        String sql = ClickHouseQuery.select(
+                CH.col("product_id"),
+                CH.sumIf("amount").where("action").eq("BET").as("total_bet"),
+                CH.countIf("user_id").where("status").eq("ACTIVE").as("active_count"),
+                CH.minIf("amount").where("type").eq("SALE").as("min_sale"),
+                CH.maxIf("amount").where("type").eq("SALE").as("max_sale"),
+                CH.avgIf("score").where("status").eq("DONE").as("avg_score")
         ).from("orders").groupBy("product_id").toSql();
 
         assertTrue(sql.contains("sumIf(amount, action = 'BET') AS total_bet"));
