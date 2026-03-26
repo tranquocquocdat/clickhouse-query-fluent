@@ -12,17 +12,18 @@ import java.util.function.Function;
 /**
  * Fluent INSERT builder for ClickHouse.
  *
- * <p>Usage:
+ * <p>
+ * Usage:
+ * 
  * <pre>{@code
  * ClickHouseInsert.into("wallet_transaction")
- *     .columns("id", "user_id", "amount", "created_at")
- *     .executeBatch(namedJdbc, transactions, t -> CHParams.of()
- *         .set("id", t.getId())
- *         .set("userId", t.getUserId())
- *         .set("amount", t.getAmount())
- *         .setTimestamp("createdAt", t.getCreatedAt())
- *         .build()
- *     );
+ *         .columns("id", "user_id", "amount", "created_at")
+ *         .executeBatch(namedJdbc, transactions, t -> CHParams.of()
+ *                 .set("id", t.getId())
+ *                 .set("userId", t.getUserId())
+ *                 .set("amount", t.getAmount())
+ *                 .setTimestamp("createdAt", t.getCreatedAt())
+ *                 .build());
  * }</pre>
  */
 public final class ClickHouseInsert {
@@ -30,7 +31,8 @@ public final class ClickHouseInsert {
     private String tableName;
     private final List<String> columnNames = new ArrayList<>();
 
-    private ClickHouseInsert() {}
+    private ClickHouseInsert() {
+    }
 
     // ── Factory ──────────────────────────────────────────────────────────
 
@@ -53,7 +55,8 @@ public final class ClickHouseInsert {
 
     /**
      * Build the INSERT SQL.
-     * Column names are used as-is for columns; camelCase versions are used as parameter names.
+     * Column names are used as-is for columns; camelCase versions are used as
+     * parameter names.
      */
     public String toSql() {
         StringJoiner colJoiner = new StringJoiner(", ");
@@ -72,13 +75,13 @@ public final class ClickHouseInsert {
 
     /** Execute a single insert. */
     public <T> void execute(NamedParameterJdbcTemplate jdbc, T entity,
-                            Function<T, MapSqlParameterSource> mapper) {
+            Function<T, MapSqlParameterSource> mapper) {
         jdbc.update(toSql(), mapper.apply(entity));
     }
 
     /** Execute batch insert. */
     public <T> void executeBatch(NamedParameterJdbcTemplate jdbc, List<T> entities,
-                                 Function<T, MapSqlParameterSource> mapper) {
+            Function<T, MapSqlParameterSource> mapper) {
         String sql = toSql();
         SqlParameterSource[] batchParams = entities.stream()
                 .map(mapper::apply)

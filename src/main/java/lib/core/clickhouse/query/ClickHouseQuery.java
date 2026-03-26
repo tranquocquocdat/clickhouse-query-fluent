@@ -637,31 +637,35 @@ public final class ClickHouseQuery {
     }
 
     /**
-     * Execute query and auto-map results to a DTO class.
-     * Uses {@link BeanPropertyRowMapper} to map {@code snake_case} columns to {@code camelCase} fields.
+     * Execute query and auto-map results to a DTO class or Java record.
+     * <ul>
+     *   <li>For <b>records</b>: uses {@link RecordRowMapper} — maps {@code snake_case} columns
+     *       to record component names (camelCase). No setters needed.</li>
+     *   <li>For <b>classes</b>: uses {@link BeanPropertyRowMapper} — requires default constructor + setters.</li>
+     * </ul>
      *
      * <pre>{@code
-     * List<OrderReport> reports = ClickHouseQuery.select("user_id", "sum(amount) AS total_amount")
-     *     .from("orders")
-     *     .where("tenant_id").eq(tenantId)
-     *     .groupBy("user_id")
-     *     .query(namedJdbc, OrderReport.class);
+     * // Works with records:
+     * public record SessionHeader(String playerId, String gameId) {}
+     * List<SessionHeader> list = query.query(namedJdbc, SessionHeader.class);
      *
-     * // OrderReport.java — just needs matching field names
+     * // Also works with regular classes:
      * public class OrderReport {
-     *     private String userId;      // ← maps from user_id
-     *     private BigDecimal totalAmount; // ← maps from total_amount
+     *     private String userId;
+     *     private BigDecimal totalAmount;
      *     // getters + setters
      * }
+     * List<OrderReport> list = query.query(namedJdbc, OrderReport.class);
      * }</pre>
      *
      * @param jdbc the JDBC template
-     * @param type the DTO class (must have default constructor + setters)
+     * @param type the DTO class or record
      * @param <T>  the DTO type
      * @return list of mapped DTOs
      */
+    @SuppressWarnings("unchecked")
     public <T> List<T> query(NamedParameterJdbcTemplate jdbc, Class<T> type) {
-        return query(jdbc, BeanPropertyRowMapper.newInstance(type));
+        return query(jdbc, smartMapper(type));
     }
 
     /**
@@ -752,8 +756,9 @@ public final class ClickHouseQuery {
      * @param <T>      the DTO type
      * @return a {@link Page} containing auto-mapped DTOs + total count
      */
+    @SuppressWarnings("unchecked")
     public <T> Page<T> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, Class<T> type) {
-        return queryPage(page, pageSize, jdbc, BeanPropertyRowMapper.newInstance(type));
+        return queryPage(page, pageSize, jdbc, smartMapper(type));
     }
 
     /** Execute query and return a single typed value. */
@@ -797,6 +802,18 @@ public final class ClickHouseQuery {
     }
 
     // ── Utilities ────────────────────────────────────────────────────────
+
+    /**
+     * Smart mapper: returns {@link RecordRowMapper} for records,
+     * {@link BeanPropertyRowMapper} for regular classes.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <T> RowMapper<T> smartMapper(Class<T> type) {
+        if (type.isRecord()) {
+            return (RowMapper<T>) RecordRowMapper.of((Class) type);
+        }
+        return BeanPropertyRowMapper.newInstance(type);
+    }
 
     /** Convert snake_case to camelCase for parameter naming. */
     public static String toCamelCase(String snake) {

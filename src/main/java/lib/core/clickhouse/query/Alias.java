@@ -80,9 +80,9 @@ public final class Alias {
 
     // ── CH expression shortcuts ─────────────────────────────────────────
 
-    /** {@code col(alias.column)} → returns a plain string like "o.amount" */
-    public String col(String column) {
-        return CH.col(c(column));
+    /** {@code col(alias.column)} → returns an Expr for fluent chaining like {@code st.col("amount").as("bet")} */
+    public CH.Expr col(String column) {
+        return new CH.Expr(c(column));
     }
 
     /** {@code sum(alias.column)} */
@@ -98,6 +98,11 @@ public final class Alias {
     /** {@code countDistinct(alias.column)} */
     public CH.Expr countDistinct(String column) {
         return CH.countDistinct(c(column));
+    }
+
+    /** {@code any(alias.column)} — picks an arbitrary value from the group. */
+    public CH.Expr any(String column) {
+        return CH.any(c(column));
     }
 
     /** {@code min(alias.column)} */

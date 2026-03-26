@@ -21,7 +21,8 @@ Alias users  = Alias.of("users");
 Page<OrderReport> page = ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
-        orders.countDistinct("order_id").as("order_count"),
+        orders.sum("amount").minus(orders.sum("cost")).as("net_profit"),   // arithmetic
+        countDistinct(orders.c("user_id"), orders.c("session_id")).as("unique_sessions"),
         orders.sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
         orders.caseWhen("amount").gt(5000).then("HIGH")
             .when("amount").gt(1000).then("MEDIUM")
@@ -56,7 +57,7 @@ page.getTotalPages(); // 229
 page.hasNext();       // true
 ```
 
-> **19 features** working together: Alias, JOIN, null-safe WHERE, ILIKE search, fluent OR, CASE WHEN, conditional aggregates (`sumIf`), HAVING, single-query pagination, auto DTO mapping — all in one fluent chain.
+> **21 features** working together: Alias, JOIN, null-safe WHERE, ILIKE search, fluent OR, CASE WHEN, conditional aggregates (`sumIf`), HAVING, single-query pagination, auto DTO mapping, fluent arithmetic (`minus`/`plus`), multi-column `countDistinct` — all in one fluent chain.
 
 ---
 
@@ -77,12 +78,14 @@ page.hasNext();       // true
 | 11 | **CASE WHEN** | `caseWhen("col").gt(0).then("HIGH").orElse("LOW").as("level")` |
 | 12 | **Expression builder** | `CH.sum()`, `CH.count()`, `CH.avg()`, `CH.min()`, `CH.max()` |
 | 13 | **Conditional aggregates** | `CH.sumIf()`, `CH.countIf()`, `CH.avgIf()`, `CH.minIf()`, `CH.maxIf()` |
-| 14 | **Fluent Subquery** | `.where("col").in(ClickHouseQuery.select(...))` |
-| 15 | **Subquery FROM** | `.from(ClickHouseQuery.select(...)).as("alias")` |
-| 16 | **UNION ALL** | `.unionAll(ClickHouseQuery.select(...))` |
-| 17 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
-| 18 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.c("amount")` |
-| 19 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
+| 14 | **Fluent arithmetic** | `sum("bet").minus(sum("cost")).as("profit")` / `.plus()` |
+| 15 | **Multi-column countDistinct** | `countDistinct(col1, col2).as("unique")` → `count(DISTINCT (col1, col2))` |
+| 16 | **Fluent Subquery** | `.where("col").in(ClickHouseQuery.select(...))` |
+| 17 | **Subquery FROM** | `.from(ClickHouseQuery.select(...)).as("alias")` |
+| 18 | **UNION ALL** | `.unionAll(ClickHouseQuery.select(...))` |
+| 19 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
+| 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.c("amount")` |
+| 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
 
 ---
 
@@ -169,19 +172,27 @@ ClickHouseQuery.select(
 
 **Alias methods:**
 
-| Method | Output |
-|---|---|
-| `orders.c("amount")` | `"orders.amount"` |
-| `orders.col("amount")` | `"orders.amount"` |
-| `orders.sum("amount")` | `sum(orders.amount)` |
-| `orders.count("id")` | `count(orders.id)` |
-| `orders.countDistinct("id")` | `countDistinct(orders.id)` |
-| `orders.min("created_at")` | `min(orders.created_at)` |
-| `orders.max("created_at")` | `max(orders.created_at)` |
-| `orders.avg("score")` | `avg(orders.score)` |
-| `orders.sumIf("amount").where("status").eq("ACTIVE")` | `sumIf(orders.amount, status = 'ACTIVE')` |
-| `orders.sumIfRaw("amount", "cond")` | `sumIf(orders.amount, cond)` |
-| `orders.caseWhen("amount").gt(5000).then("HIGH")` | `CASE WHEN orders.amount > 5000 ...` |
+| Method | Return | Output |
+|---|---|---|
+| `orders.c("amount")` | `String` | `"orders.amount"` — for WHERE, JOIN, GROUP BY |
+| `orders.col("amount")` | `Expr` | `orders.amount` — supports `.as()`, `.minus()`, `.plus()` |
+| `orders.col("amount").as("bet")` | `String` | `orders.amount AS bet` |
+| `orders.col("bet").minus(orders.col("cost")).as("net")` | `String` | `orders.bet - orders.cost AS net` |
+| `orders.sum("amount")` | `Expr` | `sum(orders.amount)` |
+| `orders.sum("bet").minus(orders.sum("cost")).as("net")` | `String` | `sum(orders.bet) - sum(orders.cost) AS net` |
+| `orders.count("id")` | `Expr` | `count(orders.id)` |
+| `orders.countDistinct("id")` | `Expr` | `countDistinct(orders.id)` |
+| `orders.min("created_at")` | `Expr` | `min(orders.created_at)` |
+| `orders.max("created_at")` | `Expr` | `max(orders.created_at)` |
+| `orders.avg("score")` | `Expr` | `avg(orders.score)` |
+| `orders.sumIf("amount").where("status").eq("ACTIVE")` | `Expr` | `sumIf(orders.amount, status = 'ACTIVE')` |
+| `orders.sumIfRaw("amount", "cond")` | `Expr` | `sumIf(orders.amount, cond)` |
+| `orders.caseWhen("amount").gt(5000).then("HIGH")` | — | `CASE WHEN orders.amount > 5000 ...` |
+
+> [!TIP]
+> **`c()` vs `col()`:**
+> - `c("col")` → `String` — dùng cho WHERE, JOIN ON, GROUP BY, ORDER BY
+> - `col("col")` → `Expr` — dùng cho SELECT columns khi cần `.as()`, `.minus()`, `.plus()`
 
 > [!IMPORTANT]
 > **Khi có JOIN (≥ 2 bảng), luôn dùng `Alias.c()` cho TẤT CẢ column references:**
@@ -365,7 +376,42 @@ caseWhen("role").eq("ADMIN").then("YES")
     .end().as("is_admin")
 ```
 
-### 9. Expression Builder & Conditional Aggregates
+### 9. Fluent Arithmetic (`minus` / `plus`)
+
+Chain arithmetic operations on any `Expr` returned by `sum()`, `col()`, `count()`, etc.:
+
+```java
+import static lib.core.clickhouse.expression.CH.*;
+
+Alias st = Alias.of("spin_transactions");
+
+// sum().minus(sum()) — aggregate arithmetic
+st.sum("bet_amount").minus(st.sum("win_amount")).as("net_result")
+// → sum(spin_transactions.bet_amount) - sum(spin_transactions.win_amount) AS net_result
+
+// col().minus(col()) — column arithmetic
+st.col("bet_amount").minus(st.col("win_amount")).as("net_result")
+// → spin_transactions.bet_amount - spin_transactions.win_amount AS net_result
+
+// Plus
+st.sum("debit").plus(st.sum("credit")).as("total")
+// → sum(spin_transactions.debit) + sum(spin_transactions.credit) AS total
+```
+
+### 10. Multi-Column `countDistinct`
+
+Count distinct combinations of multiple columns:
+
+```java
+import static lib.core.clickhouse.expression.CH.*;
+
+Alias st = Alias.of("spin_transactions");
+
+countDistinct(st.c("user_id"), st.c("session_id")).as("total_sessions")
+// → count(DISTINCT (spin_transactions.user_id, spin_transactions.session_id)) AS total_sessions
+```
+
+### 11. Expression Builder & Conditional Aggregates
 
 **Fluent (recommended):**
 
@@ -390,7 +436,7 @@ sumIfRaw("amount", "action = 'BET'").as("total_bet")
 countIfRaw("user_id", in("status", "VIP", "PREMIUM")).as("premium_count")
 ```
 
-### 10. HAVING with Aggregates
+### 12. HAVING with Aggregates
 
 ```java
 ClickHouseQuery.select("user_id", sum("amount").as("total"))
@@ -402,7 +448,7 @@ ClickHouseQuery.select("user_id", sum("amount").as("total"))
     .query(namedJdbc, Report.class);
 ```
 
-### 11. Subquery FROM
+### 13. Subquery FROM
 
 ```java
 ClickHouseQuery.select("user_id", "total")
@@ -420,7 +466,7 @@ ClickHouseQuery.select("user_id", "total")
 // → SELECT ... FROM (SELECT ... GROUP BY user_id) AS sub WHERE total > ...
 ```
 
-### 12. UNION ALL
+### 14. UNION ALL
 
 ```java
 // Combine results from multiple tables
@@ -438,7 +484,7 @@ ClickHouseQuery.select("user_id", "amount").from("orders_2023")
     .query(namedJdbc, Report.class);
 ```
 
-### 13. WITH (CTE — Common Table Expressions)
+### 15. WITH (CTE — Common Table Expressions)
 
 ```java
 // Single CTE
@@ -465,7 +511,7 @@ ClickHouseQuery
     .query(namedJdbc, Report.class);
 ```
 
-### 14. Subquery Count
+### 16. Subquery Count
 
 ```java
 // Style 1 — Static count
@@ -487,7 +533,7 @@ long total = ClickHouseQuery
     .count(namedJdbc);
 ```
 
-### 15. Single-Query Pagination (`queryPage`)
+### 17. Single-Query Pagination (`queryPage`)
 
 Get paginated data **and total count in one query** — no extra `COUNT(*)` query:
 
@@ -507,9 +553,28 @@ page.hasPrevious();   // false (page 0)
 
 Internally uses `count(*) OVER()` window function — total count computed **before** LIMIT.
 
-### 16. Auto DTO Mapping
+### 18. Auto DTO Mapping
 
 No `RowMapper` needed — just pass your DTO class:
+
+**Option A — Java `record` (recommended):**
+
+```java
+public record OrderReport(
+    String userId,             // ← auto mapped from user_id
+    BigDecimal totalAmount,    // ← auto mapped from total_amount
+    long orderCount            // ← auto mapped from order_count
+) {}
+
+List<OrderReport> reports = ClickHouseQuery.select(
+        col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
+    )
+    .from("orders")
+    .groupBy("user_id")
+    .query(namedJdbc, OrderReport.class);   // auto RecordRowMapper
+```
+
+**Option B — POJO class:**
 
 ```java
 public class OrderReport {
@@ -519,14 +584,17 @@ public class OrderReport {
     // getters + setters (required)
 }
 
-// List query
 List<OrderReport> reports = ClickHouseQuery.select(
         col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
     )
     .from("orders")
     .groupBy("user_id")
-    .query(namedJdbc, OrderReport.class);
+    .query(namedJdbc, OrderReport.class);   // auto BeanPropertyRowMapper
+```
 
+**Common usage:**
+
+```java
 // Single result
 OrderSummary summary = ClickHouseQuery.select("count(*) AS total_orders")
     .from("orders")
@@ -539,7 +607,9 @@ Page<OrderReport> page = ClickHouseQuery.select(col("user_id"), sum("amount").as
     .queryPage(0, 10, namedJdbc, OrderReport.class);
 ```
 
-Uses Spring's `BeanPropertyRowMapper` — maps `snake_case` → `camelCase`. DTO needs **default constructor** + **setters**.
+**Smart Mapper** auto-detects:
+- Java `record` → uses `RecordRowMapper` (reflection-based, matches component names)
+- POJO class → uses `BeanPropertyRowMapper` (Spring, `snake_case` → `camelCase`)
 
 **Manual RowMapper** — for complex mapping, transformation, or when column names don't match:
 
@@ -561,10 +631,11 @@ List<OrderReport> reports = ClickHouseQuery.select(
 
 | Cách | Khi nào dùng |
 |---|---|
-| **Auto** `.query(jdbc, Class)` | Column name match field name (`snake_case` → `camelCase`) |
+| **Auto `record`** `.query(jdbc, Record.class)` | Java 16+, immutable, column alias = component name |
+| **Auto `class`** `.query(jdbc, Class)` | POJO with setters, `snake_case` → `camelCase` |
 | **Manual** `.query(jdbc, RowMapper)` | Cần transform, combine fields, hoặc tên không match |
 
-### 17. Default LIMIT (Safety Guard)
+### 19. Default LIMIT (Safety Guard)
 
 Auto `LIMIT 1000` when `.query()` is called without an explicit `.limit()`:
 
@@ -583,7 +654,7 @@ ClickHouseQuery.select("*").from("orders")
 
 > **Note:** `UNION ALL` queries are excluded. Default value: `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
 
-### 18. INSERT
+### 20. INSERT
 
 ```java
 ClickHouseInsert.into("orders")
@@ -638,10 +709,13 @@ ClickHouseQuery.select("user_id")
 | `count()` | `count(*)` |
 | `count("col")` | `count(col)` |
 | `countDistinct("col")` | `countDistinct(col)` |
+| `countDistinct("col1", "col2")` | `count(DISTINCT (col1, col2))` — **multi-column** |
 | `sum("col")` | `sum(col)` |
 | `min("col")` | `min(col)` |
 | `max("col")` | `max(col)` |
 | `avg("col")` | `avg(col)` |
+| `.minus(expr)` | `expr1 - expr2` — **arithmetic** |
+| `.plus(expr)` | `expr1 + expr2` — **arithmetic** |
 | `sumIf("col").where("c").eq(v)` | `sumIf(col, c = 'v')` — **fluent** |
 | `countIf("col").where("c").in(...)` | `countIf(col, c IN (...))` — **fluent** |
 | `minIf("col").where("c").gt(v)` | `minIf(col, c > v)` — **fluent** |

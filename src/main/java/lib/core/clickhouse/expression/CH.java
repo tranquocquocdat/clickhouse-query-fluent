@@ -10,7 +10,9 @@ package lib.core.clickhouse.expression;
  * ClickHouseQuery.select(
  *     col("product_id"),
  *     countDistinct("order_id").as("total_orders"),
+ *     countDistinct("user_id", "session_id").as("unique_sessions"),   // multi-column
  *     sum("amount").as("total_revenue"),
+ *     sum("bet").minus(sum("win")).as("net_result"),                   // arithmetic
  *     sumIf("amount", "type = 'SALE'").as("total_revenue"),
  *     sumIf("amount", in("action", "SALE", "UPSELL")).as("total_sales"),
  *     min("created_at").as("first_ts"),
@@ -38,6 +40,26 @@ public final class CH {
             return expression + " AS " + alias;
         }
 
+        /** Subtract: {@code expr1 - expr2} */
+        public Expr minus(Expr other) {
+            return new Expr(expression + " - " + other.expression);
+        }
+
+        /** Subtract raw: {@code expr1 - rawExpr} */
+        public Expr minus(String raw) {
+            return new Expr(expression + " - " + raw);
+        }
+
+        /** Add: {@code expr1 + expr2} */
+        public Expr plus(Expr other) {
+            return new Expr(expression + " + " + other.expression);
+        }
+
+        /** Add raw: {@code expr1 + rawExpr} */
+        public Expr plus(String raw) {
+            return new Expr(expression + " + " + raw);
+        }
+
         /** Return raw expression without alias. */
         @Override
         public String toString() {
@@ -60,6 +82,22 @@ public final class CH {
     /** {@code countDistinct(column)} */
     public static Expr countDistinct(String column) {
         return new Expr("countDistinct(" + column + ")");
+    }
+
+    /** {@code count(DISTINCT (col1, col2, ...))} — multi-column distinct count */
+    public static Expr countDistinct(String col1, String col2, String... more) {
+        StringBuilder sb = new StringBuilder("count(DISTINCT (")
+                .append(col1).append(", ").append(col2);
+        for (String c : more) {
+            sb.append(", ").append(c);
+        }
+        sb.append("))");
+        return new Expr(sb.toString());
+    }
+
+    /** {@code any(column)} — picks an arbitrary value from the group. */
+    public static Expr any(String column) {
+        return new Expr("any(" + column + ")");
     }
 
     /** {@code sum(column)} */
