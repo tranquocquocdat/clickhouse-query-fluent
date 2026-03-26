@@ -458,7 +458,7 @@ Alias sub = Alias.of("sub");
 
 ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
     .from(
-        ClickHouseQuery.select("user_id", "sum(amount) AS total")
+        ClickHouseQuery.select(col("user_id"), sum("amount").as("total"))
             .from("orders")
             .where("tenant_id").eq(tenantId)
             .groupBy("user_id"),
