@@ -151,9 +151,8 @@ Avoid hard-coded `"o."`, `"u."` prefix strings:
 Alias orders = Alias.of("orders");     // orders.c("amount") → "orders.amount"
 Alias users  = Alias.of("users");      // users.c("name")    → "users.name"
 
-// With short alias (2 styles — same result):
-Alias o = Alias.of("orders").as("o");  // fluent (recommended)
-Alias o = Alias.of("orders", "o");     // classic
+// With short alias:
+Alias o = Alias.of("orders").as("o");  // o.c("amount") → "o.amount"
 
 ClickHouseQuery.select(
         users.col("name"),

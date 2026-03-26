@@ -18,8 +18,8 @@ import lib.core.clickhouse.expression.CH;
  *     .where(orders.c("tenant_id")).eq(tenantId)
  *
  * // Short alias — when you want o.amount instead of orders.amount
- * Alias o = Alias.of("orders", "o");
- * Alias u = Alias.of("users", "u");
+ * Alias o = Alias.of("orders").as("o");
+ * Alias u = Alias.of("users").as("u");
  *
  * ClickHouseQuery.select(u.col("name"), o.sum("amount").as("total"))
  *     .from(o)                                    // FROM orders o
@@ -36,17 +36,6 @@ public final class Alias {
         this.alias = alias;
     }
 
-    /**
-     * Create an Alias with a custom short alias.
-     * {@code Alias.of("orders", "o")} → {@code o.c("amount")} = {@code "o.amount"}
-     *
-     * @param table the table name (e.g. {@code "orders"})
-     * @param alias the short alias (e.g. {@code "o"})
-     * @return a reusable Alias instance
-     */
-    public static Alias of(String table, String alias) {
-        return new Alias(table, alias);
-    }
 
     /**
      * Create an Alias using the table name as the prefix.
@@ -71,7 +60,7 @@ public final class Alias {
      * Returns the table reference for FROM/JOIN clauses.
      * <ul>
      *   <li>{@code Alias.of("orders")} → {@code "orders"}</li>
-     *   <li>{@code Alias.of("orders", "o")} → {@code "orders o"}</li>
+     *   <li>{@code Alias.of("orders").as("o")} → {@code "orders o"}</li>
      * </ul>
      */
     public String ref() {

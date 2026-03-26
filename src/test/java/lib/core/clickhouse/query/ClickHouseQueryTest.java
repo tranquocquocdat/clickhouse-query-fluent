@@ -1610,7 +1610,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias.of(table, alias) — ref() returns 'table alias'")
         void aliasRef() {
-            Alias o = Alias.of("orders", "o");
+            Alias o = Alias.of("orders").as("o");
             assertEquals("orders o", o.ref());
             assertEquals("o", o.toString());
         }
@@ -1627,7 +1627,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias.c() prefixes column name")
         void aliasPrefixesColumn() {
-            Alias o = Alias.of("orders", "o");
+            Alias o = Alias.of("orders").as("o");
             assertEquals("o.amount", o.c("amount"));
             assertEquals("o.created_at", o.c("created_at"));
         }
@@ -1635,7 +1635,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias expression shortcuts")
         void aliasExpressionShortcuts() {
-            Alias o = Alias.of("orders", "o");
+            Alias o = Alias.of("orders").as("o");
             assertEquals("sum(o.amount)", o.sum("amount").toString());
             assertEquals("count(o.id)", o.count("id").toString());
             assertEquals("countDistinct(o.user_id)", o.countDistinct("user_id").toString());
@@ -1647,7 +1647,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias conditional aggregate shortcuts")
         void aliasConditionalAggregates() {
-            Alias o = Alias.of("orders", "o");
+            Alias o = Alias.of("orders").as("o");
             assertEquals("sumIf(o.amount, status = 'ACTIVE')",
                     o.sumIfRaw("amount", "status = 'ACTIVE'").toString());
             assertEquals("countIf(o.id, type = 'SALE')",
@@ -1657,9 +1657,9 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Full query with Alias — zero manual prefix strings")
         void fullQueryWithAlias() {
-            Alias o = Alias.of("orders", "o");
-            Alias u = Alias.of("users", "u");
-            Alias p = Alias.of("products", "p");
+            Alias o = Alias.of("orders").as("o");
+            Alias u = Alias.of("users").as("u");
+            Alias p = Alias.of("products").as("p");
 
             String sql = ClickHouseQuery.select(
                         u.col("name"),
@@ -1706,7 +1706,7 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("Alias.toString() returns alias prefix only")
         void aliasToString() {
-            assertEquals("o", Alias.of("orders", "o").toString());
+            assertEquals("o", Alias.of("orders").as("o").toString());
             assertEquals("orders", Alias.of("orders").toString());
         }
     }
