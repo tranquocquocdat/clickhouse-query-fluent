@@ -512,7 +512,28 @@ Page<OrderReport> page = ClickHouseQuery.select(col("user_id"), sum("amount").as
 
 Uses Spring's `BeanPropertyRowMapper` — maps `snake_case` → `camelCase`. DTO needs **default constructor** + **setters**.
 
-> **Tip:** You can still use `RowMapper` for complex mapping: `.query(jdbc, (rs, rowNum) -> ...)`
+**Manual RowMapper** — for complex mapping, transformation, or when column names don't match:
+
+```java
+List<OrderReport> reports = ClickHouseQuery.select(
+        col("user_id"), sum("amount").as("total"), count().as("cnt")
+    )
+    .from("orders")
+    .groupBy("user_id")
+    .query(namedJdbc, (rs, rowNum) -> {
+        OrderReport r = new OrderReport();
+        r.setUserId(rs.getString("user_id"));
+        r.setTotal(rs.getBigDecimal("total"));
+        r.setOrderCount(rs.getLong("cnt"));
+        r.setFormatted("$" + rs.getBigDecimal("total").toPlainString());
+        return r;
+    });
+```
+
+| Cách | Khi nào dùng |
+|---|---|
+| **Auto** `.query(jdbc, Class)` | Column name match field name (`snake_case` → `camelCase`) |
+| **Manual** `.query(jdbc, RowMapper)` | Cần transform, combine fields, hoặc tên không match |
 
 ### 17. Default LIMIT (Safety Guard)
 
