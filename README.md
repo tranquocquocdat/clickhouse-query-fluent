@@ -22,7 +22,7 @@ Page<OrderReport> page = ClickHouseQuery.select(
         users.col("name"),
         orders.sum("amount").as("total_revenue"),
         orders.sum("amount").minus(orders.sum("cost")).as("net_profit"),   // arithmetic
-        countDistinct(orders.col("user_id").toString(), orders.col("session_id").toString()).as("unique_sessions"),
+        countDistinct(orders.col("user_id"), orders.col("session_id")).as("unique_sessions"),
         orders.sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue"),
         orders.caseWhen("amount").gt(5000).then("HIGH")
             .when("amount").gt(1000).then("MEDIUM")
@@ -406,7 +406,7 @@ import static lib.core.clickhouse.expression.CH.*;
 
 Alias st = Alias.of("spin_transactions");
 
-countDistinct(st.col("user_id").toString(), st.col("session_id").toString()).as("total_sessions")
+countDistinct(st.col("user_id"), st.col("session_id")).as("total_sessions")
 // → count(DISTINCT (spin_transactions.user_id, spin_transactions.session_id)) AS total_sessions
 ```
 

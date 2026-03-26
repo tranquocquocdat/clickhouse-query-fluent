@@ -108,6 +108,22 @@ public final class CH {
         return new Expr(sb.toString());
     }
 
+    /** {@code countDistinct(expr)} — single Expr overload */
+    public static Expr countDistinct(Expr column) {
+        return new Expr("countDistinct(" + column + ")");
+    }
+
+    /** {@code count(DISTINCT (expr1, expr2, ...))} — multi-column Expr overload */
+    public static Expr countDistinct(Expr col1, Expr col2, Expr... more) {
+        StringBuilder sb = new StringBuilder("count(DISTINCT (")
+                .append(col1).append(", ").append(col2);
+        for (Expr c : more) {
+            sb.append(", ").append(c);
+        }
+        sb.append("))");
+        return new Expr(sb.toString());
+    }
+
     /** {@code any(column)} — picks an arbitrary value from the group. */
     public static Expr any(String column) {
         return new Expr("any(" + column + ")");
