@@ -371,7 +371,7 @@ public final class ClickHouseQuery {
     }
 
     /** Always-applied WHERE clause with raw condition and parameter. */
-    public ClickHouseQuery where(String condition, String paramName, Object value) {
+    public ClickHouseQuery whereRaw(String condition, String paramName, Object value) {
         advanceTo(Phase.WHERE);
         whereClauses.add(condition);
         params.addValue(paramName, value);
@@ -441,7 +441,7 @@ public final class ClickHouseQuery {
     }
 
     /** Start a fluent HAVING clause on a raw expression string. */
-    public HavingBuilder having(String expression) {
+    public HavingBuilder havingRaw(String expression) {
         advanceTo(Phase.HAVING);
         return new HavingBuilder(this, expression);
     }

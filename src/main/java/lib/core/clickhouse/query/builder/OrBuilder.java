@@ -54,8 +54,8 @@ public final class OrBuilder {
 
     // ── Legacy API (still works) ────────────────────────────────────────
 
-    /** {@code column = value} (shorthand) */
-    public OrBuilder add(String column, Object value) {
+    /** {@code column = value} (shorthand, legacy) */
+    public OrBuilder addEq(String column, Object value) {
         String p = nextParam();
         conditions.add(column + " = :" + p);
         query.params.addValue(p, value);

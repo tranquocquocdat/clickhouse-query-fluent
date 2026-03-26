@@ -446,8 +446,8 @@ class ClickHouseQueryTest {
                     .select("*")
                     .from("t")
                     .whereOr(or -> or
-                            .add("status", "ACTIVE")
-                            .add("status", "PENDING")
+                            .addEq("status", "ACTIVE")
+                            .addEq("status", "PENDING")
                     );
 
             String sql = q.toSql();
@@ -631,7 +631,7 @@ class ClickHouseQueryTest {
                     .select("user_id", "count(*) AS cnt")
                     .from("t")
                     .groupBy("user_id")
-                    .having("count(*)").gte(5)
+                    .havingRaw("count(*)").gte(5)
                     .toSql();
 
             assertTrue(sql.contains("HAVING count(*) >= :"));
@@ -641,11 +641,11 @@ class ClickHouseQueryTest {
         @DisplayName("HAVING supports all operators")
         void havingOperators() {
             ClickHouseQuery q = ClickHouseQuery.select("x").from("t").groupBy("x");
-            q.having("a").eq(1);
-            q.having("b").ne(2);
-            q.having("c").lt(3);
-            q.having("d").lte(4);
-            q.having("e").between(5, 6);
+            q.havingRaw("a").eq(1);
+            q.havingRaw("b").ne(2);
+            q.havingRaw("c").lt(3);
+            q.havingRaw("d").lte(4);
+            q.havingRaw("e").between(5, 6);
             
             String sql = q.toSql();
             assertTrue(sql.contains("HAVING a = :"));
@@ -897,7 +897,7 @@ class ClickHouseQueryTest {
                     .from("t")
                     .groupBy("user_id")
                     .orderBy("user_id")
-                    .having("count(*)").gt(1)
+                    .havingRaw("count(*)").gt(1)
             );
         }
 
@@ -1032,7 +1032,7 @@ class ClickHouseQueryTest {
                 ClickHouseQuery.select("user_id", "sum(amount) AS total")
                     .from("orders")
                     .groupBy("user_id")
-                    .having("sum(amount)").gt(100)
+                    .havingRaw("sum(amount)").gt(100)
                     .where("status").eq("ACTIVE")
             );
         }
@@ -1117,7 +1117,7 @@ class ClickHouseQueryTest {
                     .where("o.amount").gt(100)
                     .where("o.deleted_at").isNull()
                     .groupBy("o.user_id")
-                    .having("sum(o.amount)").gt(500)
+                    .havingRaw("sum(o.amount)").gt(500)
                     .orderBy("o.amount", SortOrder.DESC)
                     .orderBy("o.created_at", SortOrder.ASC)
                     .limit(10)
