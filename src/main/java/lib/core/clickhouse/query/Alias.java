@@ -60,6 +60,14 @@ public final class Alias {
     }
 
     /**
+     * Create a short alias from this Alias (fluent chaining).
+     * {@code Alias.of("orders").as("o")} → {@code o.c("amount")} = {@code "o.amount"}
+     */
+    public Alias as(String shortAlias) {
+        return new Alias(this.table, shortAlias);
+    }
+
+    /**
      * Returns the table reference for FROM/JOIN clauses.
      * <ul>
      *   <li>{@code Alias.of("orders")} → {@code "orders"}</li>
