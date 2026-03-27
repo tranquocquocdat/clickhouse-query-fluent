@@ -3,6 +3,8 @@ package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.CH;
 import lib.core.clickhouse.query.builder.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -714,7 +716,9 @@ public final class ClickHouseQuery {
         if (limitVal == null && unionQueries.isEmpty()) {
             this.limitVal = DEFAULT_LIMIT;
         }
-        return jdbc.query(toSql(), params, rowMapper);
+        String sql = toSql();
+        logQuery(sql);
+        return jdbc.query(sql, params, rowMapper);
     }
 
     /**
@@ -802,6 +806,7 @@ public final class ClickHouseQuery {
         this.offsetVal = (long) page * pageSize;
 
         String sql = toSql();
+        logQuery(sql);
 
         // Track total from first row
         final long[] totalHolder = {0};
@@ -844,7 +849,9 @@ public final class ClickHouseQuery {
 
     /** Execute query and return a single typed value. */
     public <T> T queryForObject(NamedParameterJdbcTemplate jdbc, Class<T> type) {
-        return jdbc.queryForObject(toSql(), params, type);
+        String sql = toSql();
+        logQuery(sql);
+        return jdbc.queryForObject(sql, params, type);
     }
 
     /**
@@ -856,6 +863,7 @@ public final class ClickHouseQuery {
      */
     public long count(NamedParameterJdbcTemplate jdbc) {
         String countSql = "SELECT count(*) FROM (" + toSql() + ")";
+        logQuery(countSql);
         Long result = jdbc.queryForObject(countSql, params, Long.class);
         return result != null ? result : 0;
     }
@@ -880,6 +888,34 @@ public final class ClickHouseQuery {
      */
     public static CountQuery count(ClickHouseQuery subQuery) {
         return new CountQuery(subQuery);
+    }
+
+    // ── Logging ──────────────────────────────────────────────────────────
+
+    private static final Logger log = LoggerFactory.getLogger(ClickHouseQuery.class);
+
+    /**
+     * Log the generated SQL and parameters.
+     * <ul>
+     *   <li><b>DEBUG</b> — logs the SQL statement</li>
+     *   <li><b>TRACE</b> — also logs the bound parameter values</li>
+     * </ul>
+     *
+     * <p>Enable in your {@code application.yml}:
+     * <pre>{@code
+     * logging:
+     *   level:
+     *     lib.core.clickhouse.query.ClickHouseQuery: DEBUG   # SQL only
+     *     lib.core.clickhouse.query.ClickHouseQuery: TRACE   # SQL + params
+     * }</pre>
+     */
+    private void logQuery(String sql) {
+        if (log.isDebugEnabled()) {
+            log.debug("\n╔══ ClickHouse Query ══════════════════════════════════════\n{}\n╚═════════════════════════════════════════════════════════", sql);
+        }
+        if (log.isTraceEnabled()) {
+            log.trace("Query params: {}", params.getValues());
+        }
     }
 
     // ── Utilities ────────────────────────────────────────────────────────
