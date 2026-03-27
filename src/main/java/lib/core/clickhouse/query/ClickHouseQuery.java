@@ -528,6 +528,16 @@ public final class ClickHouseQuery {
         return orderBy(column, SortOrder.ASC);
     }
 
+    /** ORDER BY column with direction (Expr overload). */
+    public ClickHouseQuery orderBy(Object column, SortOrder direction) {
+        return orderBy(column.toString(), direction);
+    }
+
+    /** ORDER BY column ASC (Expr overload). */
+    public ClickHouseQuery orderBy(Object column) {
+        return orderBy(column.toString(), SortOrder.ASC);
+    }
+
     // ── UNION ALL ────────────────────────────────────────────────────────
 
     /**

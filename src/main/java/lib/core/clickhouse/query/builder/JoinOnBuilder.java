@@ -62,6 +62,11 @@ public final class JoinOnBuilder {
         return query.orderBy(column, order);
     }
 
+    /** Continue to ORDER BY phase (Expr overload). */
+    public ClickHouseQuery orderBy(Object column, SortOrder order) {
+        return query.orderBy(column.toString(), order);
+    }
+
     /** Continue to LIMIT phase. */
     public ClickHouseQuery limit(int n) {
         return query.limit(n);
