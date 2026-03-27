@@ -36,6 +36,20 @@ public final class WhereILikeBuilder {
         return query;
     }
 
+    /** Overload accepting Expr/Object columns directly (no .toString() needed). */
+    public ClickHouseQuery on(Object... columns) {
+        if (keyword == null || keyword.isBlank()) return query;
+        String operator = caseSensitive ? "LIKE" : "ILIKE";
+        String paramName = caseSensitive ? "_likeKeyword" : "_keyword";
+        StringJoiner or = new StringJoiner(" OR ", "(", ")");
+        for (Object col : columns) {
+            or.add(col.toString() + " " + operator + " :" + paramName);
+        }
+        query.whereClauses.add(or.toString());
+        query.params.addValue(paramName, "%" + keyword.trim() + "%");
+        return query;
+    }
+
     /**
      * Apply prefix-only LIKE/ILIKE search across the given columns (combined with OR).
      * Uses {@code keyword%} pattern — optimized for index prefix matching.
@@ -48,6 +62,20 @@ public final class WhereILikeBuilder {
         StringJoiner or = new StringJoiner(" OR ", "(", ")");
         for (String col : columns) {
             or.add(col + " " + operator + " :" + paramName);
+        }
+        query.whereClauses.add(or.toString());
+        query.params.addValue(paramName, keyword.trim() + "%");
+        return query;
+    }
+
+    /** Overload accepting Expr/Object columns directly (no .toString() needed). */
+    public ClickHouseQuery onPrefix(Object... columns) {
+        if (keyword == null || keyword.isBlank()) return query;
+        String operator = caseSensitive ? "LIKE" : "ILIKE";
+        String paramName = caseSensitive ? "_likePrefixKeyword" : "_prefixKeyword";
+        StringJoiner or = new StringJoiner(" OR ", "(", ")");
+        for (Object col : columns) {
+            or.add(col.toString() + " " + operator + " :" + paramName);
         }
         query.whereClauses.add(or.toString());
         query.params.addValue(paramName, keyword.trim() + "%");
