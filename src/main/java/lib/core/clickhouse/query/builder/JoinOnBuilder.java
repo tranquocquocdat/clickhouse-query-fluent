@@ -42,6 +42,11 @@ public final class JoinOnBuilder {
         return query.whereILike(keyword);
     }
 
+    /** Continue to OR-grouped WHERE phase. */
+    public ClickHouseQuery whereOr(java.util.function.Consumer<OrBuilder> consumer) {
+        return query.whereOr(consumer);
+    }
+
     /** Continue to LIKE search phase. */
     public WhereILikeBuilder whereLike(String keyword) {
         return query.whereLike(keyword);

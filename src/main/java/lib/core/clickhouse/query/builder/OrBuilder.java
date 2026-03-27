@@ -189,6 +189,33 @@ public final class OrBuilder {
             return or;
         }
 
+        /**
+         * {@code column >= from AND column <= to} — skipped when both are null.
+         * If only one bound is null, generates a one-sided condition.
+         */
+        public OrBuilder between(java.time.Instant from, java.time.Instant to) {
+            if (from == null && to == null) return or;
+            java.time.format.DateTimeFormatter fmt =
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                            .withZone(java.time.ZoneOffset.UTC);
+            if (from != null && to != null) {
+                String pFrom = or.nextParam();
+                String pTo = or.nextParam();
+                or.conditions.add("(" + column + " >= :" + pFrom + " AND " + column + " <= :" + pTo + ")");
+                or.query.params.addValue(pFrom, fmt.format(from));
+                or.query.params.addValue(pTo, fmt.format(to));
+            } else if (from != null) {
+                String p = or.nextParam();
+                or.conditions.add(column + " >= :" + p);
+                or.query.params.addValue(p, fmt.format(from));
+            } else {
+                String p = or.nextParam();
+                or.conditions.add(column + " <= :" + p);
+                or.query.params.addValue(p, fmt.format(to));
+            }
+            return or;
+        }
+
         /** {@code column ILIKE :param} — skipped when value is null or blank. */
         public OrBuilder ilike(String value) {
             if (value == null || value.isBlank()) return or;
