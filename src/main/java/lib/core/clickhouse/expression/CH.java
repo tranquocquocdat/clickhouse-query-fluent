@@ -60,6 +60,26 @@ public final class CH {
             return new Expr(expression + " + " + raw);
         }
 
+        /** Multiply: {@code expr1 * expr2} */
+        public Expr multiply(Expr other) {
+            return new Expr("(" + expression + ") * (" + other.expression + ")");
+        }
+
+        /** Multiply raw: {@code expr1 * rawExpr} */
+        public Expr multiply(String raw) {
+            return new Expr("(" + expression + ") * (" + raw + ")");
+        }
+
+        /** Divide: {@code expr1 / expr2} */
+        public Expr divide(Expr other) {
+            return new Expr("(" + expression + ") / (" + other.expression + ")");
+        }
+
+        /** Divide raw: {@code expr1 / rawExpr} */
+        public Expr divide(String raw) {
+            return new Expr("(" + expression + ") / (" + raw + ")");
+        }
+
         /** Return raw expression without alias. */
         @Override
         public String toString() {

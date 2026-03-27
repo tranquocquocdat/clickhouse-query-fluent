@@ -1771,4 +1771,343 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("amount"));
         }
     }
+
+    // ── CASE WHEN ──────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("CASE WHEN")
+    class CaseWhenTests {
+
+        @Test
+        @DisplayName("Basic CASE WHEN with eq and orElse")
+        void basicCaseWhen() {
+            String result = CH.caseWhen("status")
+                    .eq("ACTIVE").then("Active")
+                    .orElse("Inactive")
+                    .toString();
+
+            assertTrue(result.contains("CASE WHEN status = 'ACTIVE' THEN 'Active' ELSE 'Inactive' END"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with multiple conditions")
+        void multipleCaseWhen() {
+            String result = CH.caseWhen("amount")
+                    .gt(1000).then("HIGH")
+                    .when("amount").gt(500).then("MEDIUM")
+                    .orElse("LOW")
+                    .toString();
+
+            assertTrue(result.contains("WHEN amount > 1000 THEN 'HIGH'"));
+            assertTrue(result.contains("WHEN amount > 500 THEN 'MEDIUM'"));
+            assertTrue(result.contains("ELSE 'LOW' END"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with numeric then value")
+        void numericThenValue() {
+            String result = CH.caseWhen("action")
+                    .eq("BET").then(1)
+                    .orElse(0)
+                    .toString();
+
+            assertTrue(result.contains("THEN 1"));
+            assertTrue(result.contains("ELSE 0 END"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with .as() alias")
+        void caseWhenWithAlias() {
+            String result = CH.caseWhen("score")
+                    .gte(80).then("PASS")
+                    .orElse("FAIL")
+                    .as("result")
+                    .toString();
+
+            assertTrue(result.contains("END AS result"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with IN condition")
+        void caseWhenWithIn() {
+            String result = CH.caseWhen("action")
+                    .in("BET", "DEBIT").then("OUT")
+                    .orElse("IN")
+                    .toString();
+
+            assertTrue(result.contains("action IN ('BET', 'DEBIT')"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with isNull")
+        void caseWhenIsNull() {
+            String result = CH.caseWhen("error_code")
+                    .isNull().then("OK")
+                    .orElse("ERROR")
+                    .toString();
+
+            assertTrue(result.contains("error_code IS NULL"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with between")
+        void caseWhenBetween() {
+            String result = CH.caseWhen("score")
+                    .between(50, 100).then("MEDIUM")
+                    .orElse("OTHER")
+                    .toString();
+
+            assertTrue(result.contains("score BETWEEN 50 AND 100"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with ne, lt, lte")
+        void caseWhenOperators() {
+            String result = CH.caseWhen("status")
+                    .ne("DELETED").then("VISIBLE")
+                    .when("score").lt(0).then("NEGATIVE")
+                    .when("score").lte(10).then("LOW")
+                    .orElse("NORMAL")
+                    .toString();
+
+            assertTrue(result.contains("status != 'DELETED'"));
+            assertTrue(result.contains("score < 0"));
+            assertTrue(result.contains("score <= 10"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with end() (no ELSE)")
+        void caseWhenNoElse() {
+            String result = CH.caseWhen("status")
+                    .eq("ACTIVE").then(1)
+                    .end()
+                    .toString();
+
+            assertTrue(result.endsWith("END"));
+            assertFalse(result.contains("ELSE"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with orElseRaw")
+        void caseWhenElseRaw() {
+            String result = CH.caseWhen("status")
+                    .eq("ACTIVE").then("YES")
+                    .orElseRaw("other_column")
+                    .toString();
+
+            assertTrue(result.contains("ELSE other_column END"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with raw condition")
+        void caseWhenRaw() {
+            String result = CH.caseWhen("col")
+                    .raw("col > 10 AND col < 100").then("MID")
+                    .orElse("OTHER")
+                    .toString();
+
+            assertTrue(result.contains("WHEN col > 10 AND col < 100 THEN 'MID'"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN in SELECT query")
+        void caseWhenInQuery() {
+            String sql = ClickHouseQuery.select(
+                    "user_id",
+                    CH.caseWhen("amount").gt(0).then("WIN").orElse("LOSE").as("result"),
+                    CH.caseWhen("action").eq("BET").then(1).orElse(0).as("is_bet")
+            ).from("orders").toSql();
+
+            assertTrue(sql.contains("CASE WHEN amount > 0 THEN 'WIN' ELSE 'LOSE' END AS result"));
+            assertTrue(sql.contains("CASE WHEN action = 'BET' THEN 1 ELSE 0 END AS is_bet"));
+        }
+
+        @Test
+        @DisplayName("Alias.caseWhen prefixes column")
+        void aliasCaseWhen() {
+            Alias o = Alias.of("orders").as("o");
+            String result = o.caseWhen("amount")
+                    .gt(5000).then("HIGH")
+                    .orElse("LOW")
+                    .as("tier")
+                    .toString();
+
+            assertTrue(result.contains("o.amount > 5000"));
+        }
+
+        @Test
+        @DisplayName("CASE WHEN with thenRaw")
+        void caseWhenThenRaw() {
+            String result = CH.caseWhen("status")
+                    .eq("ACTIVE").thenRaw("amount * 2")
+                    .orElse(0)
+                    .toString();
+
+            assertTrue(result.contains("THEN amount * 2"));
+        }
+    }
+
+    // ── Generic between (numbers) ──────────────────────────────────────
+
+    @Nested
+    @DisplayName("Generic between")
+    class GenericBetweenTests {
+
+        @Test
+        @DisplayName("between(int, int) for numbers")
+        void betweenNumbers() {
+            ClickHouseQuery q = ClickHouseQuery.select("*")
+                    .from("t")
+                    .where("amount").between(100, 500);
+
+            String sql = q.toSql();
+            assertTrue(sql.contains("amount >= :amountFrom"));
+            assertTrue(sql.contains("amount <= :amountTo"));
+            assertEquals(100, q.toParams().getValue("amountFrom"));
+            assertEquals(500, q.toParams().getValue("amountTo"));
+        }
+
+        @Test
+        @DisplayName("between(null, value) for one-sided bound")
+        void betweenOneSided() {
+            String sql = ClickHouseQuery.select("*")
+                    .from("t")
+                    .where("score").between(null, 100)
+                    .toSql();
+
+            assertFalse(sql.contains(">="));
+            assertTrue(sql.contains("score <= :scoreTo"));
+        }
+
+        @Test
+        @DisplayName("between(value, null) for lower bound only")
+        void betweenLowerOnly() {
+            String sql = ClickHouseQuery.select("*")
+                    .from("t")
+                    .where("score").between(50, null)
+                    .toSql();
+
+            assertTrue(sql.contains("score >= :scoreFrom"));
+            assertFalse(sql.contains("<="));
+        }
+    }
+
+    // ── Multiply / Divide ──────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Expr multiply / divide")
+    class MultiplyDivideTests {
+
+        @Test
+        @DisplayName("Expr.multiply(Expr)")
+        void multiplyExpr() {
+            String result = CH.sum("amount").multiply(CH.count()).toString();
+            assertTrue(result.contains("(sum(amount)) * (count(*))"));
+        }
+
+        @Test
+        @DisplayName("Expr.multiply(String)")
+        void multiplyRaw() {
+            String result = CH.sum("price").multiply("quantity").toString();
+            assertTrue(result.contains("(sum(price)) * (quantity)"));
+        }
+
+        @Test
+        @DisplayName("Expr.divide(Expr)")
+        void divideExpr() {
+            String result = CH.sum("total_bet").divide(CH.count()).as("avg_bet").toString();
+            assertTrue(result.contains("(sum(total_bet)) / (count(*)) AS avg_bet"));
+        }
+
+        @Test
+        @DisplayName("Expr.divide(String)")
+        void divideRaw() {
+            String result = CH.sum("amount").divide("100").toString();
+            assertTrue(result.contains("(sum(amount)) / (100)"));
+        }
+
+        @Test
+        @DisplayName("Chained arithmetic: (a - b) / c")
+        void chainedArithmetic() {
+            String result = CH.sum("bet").minus(CH.sum("win"))
+                    .divide(CH.sum("bet"))
+                    .as("margin")
+                    .toString();
+
+            assertTrue(result.contains("/ (sum(bet))"));
+            assertTrue(result.contains("AS margin"));
+        }
+    }
+
+    // ── FULL OUTER JOIN ────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("FULL OUTER JOIN")
+    class FullJoinTests {
+
+        @Test
+        @DisplayName("fullJoin generates FULL OUTER JOIN")
+        void fullJoin() {
+            String sql = ClickHouseQuery.select("*")
+                    .from("t")
+                    .fullJoin("other o").on("o.id", "t.other_id")
+                    .toSql();
+
+            assertTrue(sql.contains("FULL OUTER JOIN other o ON o.id = t.other_id"));
+        }
+
+        @Test
+        @DisplayName("fullJoin with Alias")
+        void fullJoinAlias() {
+            Alias t = Alias.of("orders").as("t");
+            Alias o = Alias.of("other").as("o");
+
+            String sql = ClickHouseQuery.select("*")
+                    .from(t)
+                    .fullJoin(o).on(o.col("id"), t.col("other_id"))
+                    .toSql();
+
+            assertTrue(sql.contains("FULL OUTER JOIN other o ON o.id = t.other_id"));
+        }
+    }
+
+    // ── OrBuilder between ──────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("OrBuilder between")
+    class OrBuilderBetweenTests {
+
+        @Test
+        @DisplayName("whereOr with between(Instant)")
+        void whereOrBetweenInstant() {
+            Instant from = Instant.parse("2026-01-01T00:00:00Z");
+            Instant to = Instant.parse("2026-12-31T23:59:59Z");
+
+            String sql = ClickHouseQuery.select("*")
+                    .from("t")
+                    .whereOr(or -> or
+                            .where("created_at").between(from, to)
+                            .where("status").eq("ACTIVE")
+                    ).toSql();
+
+            assertTrue(sql.contains("created_at >= :_or0"));
+            assertTrue(sql.contains("created_at <= :_or1"));
+            assertTrue(sql.contains("status = :_or2"));
+            assertTrue(sql.contains(" OR "));
+        }
+
+        @Test
+        @DisplayName("whereOr between with null bounds")
+        void whereOrBetweenNullBounds() {
+            String sql = ClickHouseQuery.select("*")
+                    .from("t")
+                    .whereOr(or -> or
+                            .where("created_at").between(null, null)
+                            .where("status").eq("ACTIVE")
+                    ).toSql();
+
+            // null between is skipped, only status remains
+            assertTrue(sql.contains("status = :_or0"));
+        }
+    }
 }

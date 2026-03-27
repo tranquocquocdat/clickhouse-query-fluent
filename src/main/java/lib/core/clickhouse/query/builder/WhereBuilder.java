@@ -114,6 +114,26 @@ public final class WhereBuilder {
     }
 
     /**
+     * Generic range: {@code column >= :colFrom AND column <= :colTo}.
+     * Works with numbers, strings, or any comparable values.
+     * Only non-null bounds are applied.
+     */
+    public ClickHouseQuery between(Object from, Object to) {
+        String base = ClickHouseQuery.toCamelCase(column);
+        if (from != null) {
+            String p = base + "From";
+            query.whereClauses.add(column + " >= :" + p);
+            query.params.addValue(p, from);
+        }
+        if (to != null) {
+            String p = base + "To";
+            query.whereClauses.add(column + " <= :" + p);
+            query.params.addValue(p, to);
+        }
+        return query;
+    }
+
+    /**
      * IN clause with auto-expansion.
      * <p>Skipped when values is null or empty.
      */

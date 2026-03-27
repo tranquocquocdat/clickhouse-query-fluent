@@ -356,6 +356,22 @@ public final class ClickHouseQuery {
         return rightJoin(alias.ref());
     }
 
+    /**
+     * Fluent FULL OUTER JOIN.
+     * <pre>{@code
+     * .fullJoin("other o").on("o.id = t.other_id")
+     * }</pre>
+     */
+    public JoinBuilder fullJoin(String table) {
+        advanceTo(Phase.JOIN);
+        return new JoinBuilder(this, "FULL OUTER JOIN", table);
+    }
+
+    /** FULL OUTER JOIN using an {@link Alias}. */
+    public JoinBuilder fullJoin(Alias alias) {
+        return fullJoin(alias.ref());
+    }
+
     // ── WHERE (fluent column-first) ──────────────────────────────────────
 
     /**
