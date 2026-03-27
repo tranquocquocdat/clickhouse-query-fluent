@@ -52,6 +52,11 @@ public final class OrBuilder {
         return new OrCondition(this, column);
     }
 
+    /** Start a fluent OR condition on a column (Expr overload). */
+    public OrCondition where(lib.core.clickhouse.expression.CH.Expr column) {
+        return new OrCondition(this, column.toString());
+    }
+
     // ── Legacy API (still works) ────────────────────────────────────────
 
     /** {@code column = value} (shorthand, legacy) */
@@ -113,6 +118,18 @@ public final class OrBuilder {
             for (String col : columns) {
                 String p = or.nextParam();
                 or.conditions.add(col + " ILIKE :" + p);
+                or.query.params.addValue(p, "%" + trimmed + "%");
+            }
+            return or;
+        }
+
+        /** Specify columns to search with ILIKE (Expr/Object overload). */
+        public OrBuilder on(Object... columns) {
+            if (keyword == null || keyword.isBlank()) return or;
+            String trimmed = keyword.trim();
+            for (Object col : columns) {
+                String p = or.nextParam();
+                or.conditions.add(col.toString() + " ILIKE :" + p);
                 or.query.params.addValue(p, "%" + trimmed + "%");
             }
             return or;
