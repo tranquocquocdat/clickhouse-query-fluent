@@ -8,7 +8,7 @@ import lib.core.clickhouse.query.SortOrder;
  *
  * <pre>{@code
  * .join(wt).on(st.col("user_id"), wt.col("user_id"))
- *          .and(st.col("spin_id"), wt.col("round_id"))
+ *          .and(o.col("order_id"), wt.col("transaction_id"))
  * }</pre>
  */
 public final class JoinOnBuilder {

@@ -21,9 +21,9 @@ import java.util.Map;
  *
  * <pre>{@code
  * // Given this record:
- * public record SessionHeader(String playerId, String gameId, String operatorId) {}
+ * public record OrderHeader(String userId, String orderId, String tenantId) {}
  *
- * // And a query returning columns: player_id, game_id, operator_id
+ * // And a query returning columns: user_id, order_id, tenant_id
  * List<SessionHeader> list = query.query(namedJdbc, SessionHeader.class);
  * }</pre>
  *

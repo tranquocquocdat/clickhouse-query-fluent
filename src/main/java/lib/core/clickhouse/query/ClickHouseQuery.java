@@ -727,7 +727,7 @@ public final class ClickHouseQuery {
      *
      * <pre>{@code
      * // Works with records:
-     * public record SessionHeader(String playerId, String gameId) {}
+     * public record OrderHeader(String userId, String orderId) {}
      * List<SessionHeader> list = query.query(namedJdbc, SessionHeader.class);
      *
      * // Also works with regular classes:

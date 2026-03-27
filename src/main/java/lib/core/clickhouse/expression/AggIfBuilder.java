@@ -7,7 +7,7 @@ package lib.core.clickhouse.expression;
  * import static lib.core.clickhouse.expression.CH.*;
  *
  * sumIf("amount").where("status").eq("COMPLETED").as("completed_revenue")
- * countIf("user_id").where("type").in("VIP", "PREMIUM").as("vip_count")
+ * countIf("user_id").where("type").in("GOLD", "PREMIUM").as("premium_count")
  * avgIf("score").where("status").eq("DONE").as("avg_done_score")
  * }</pre>
  */

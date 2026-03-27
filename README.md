@@ -9,7 +9,7 @@ Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe
 
 ## ⚡ Best Practice — Real-World Example
 
-> **Use case:** Game operator analytics dashboard — covers **every** library feature in one coherent example.
+> **Use case:** E-commerce analytics dashboard — covers **every** library feature in one coherent example.
 
 ```java
 import static lib.core.clickhouse.expression.CH.*;
@@ -23,150 +23,150 @@ import java.util.List;
 // ══════════════════════════════════════════════════════════════════
 // 1. TYPE-SAFE ALIASES  —  no more "t." string literals
 // ══════════════════════════════════════════════════════════════════
-Alias st  = Alias.of("spin_transactions").as("st");  // main table
-Alias g   = Alias.of("games").as("g");               // INNER JOIN
-Alias p   = Alias.of("players").as("p");             // LEFT JOIN
-Alias cfg = Alias.of("game_config").as("cfg");       // RIGHT JOIN
-Alias rb  = Alias.of("refund_buckets").as("rb");     // FULL OUTER JOIN
-Alias sub = Alias.of("player_summary").as("ps");     // subquery alias
+Alias oi  = Alias.of("order_items").as("oi");          // main table
+Alias p   = Alias.of("products").as("p");              // INNER JOIN
+Alias u   = Alias.of("users").as("u");                 // LEFT JOIN
+Alias cfg = Alias.of("product_config").as("cfg");      // RIGHT JOIN
+Alias rb  = Alias.of("return_buckets").as("rb");       // FULL OUTER JOIN
+Alias sub = Alias.of("user_summary").as("us");         // subquery alias
 
 // ══════════════════════════════════════════════════════════════════
 // 2. CTE (WITH) + ALL 4 JOIN TYPES + EVERY SELECT FEATURE
 // ══════════════════════════════════════════════════════════════════
-Page<GameStatReport> report = ClickHouseQuery
+Page<SalesReport> report = ClickHouseQuery
 
     // ── WITH (CTE) ─────────────────────────────────────────────
-    .with("active_games",
-        ClickHouseQuery.select("game_id")
-            .from("game_config")
+    .with("active_products",
+        ClickHouseQuery.select("product_id")
+            .from("product_config")
             .where("status").eq("ACTIVE")
-            .where("operator_id").eq(operatorId)
+            .where("tenant_id").eq(tenantId)
     )
 
     // ── SELECT: aggregates + arithmetic + conditional aggs + CASE WHEN
     .select(
         // Plain columns via Alias
-        st.col("operator_id"),
-        g.col("game_name"),
-        p.col("currency"),
+        oi.col("tenant_id"),
+        p.col("product_name"),
+        u.col("currency"),
 
         // Basic aggregates
-        st.sum("bet_amount").as("total_bet"),
-        st.sum("win_amount").as("total_win"),
-        count().as("total_spins"),
-        avg("bet_amount").as("avg_bet"),
-        min("bet_amount").as("min_bet"),
-        max("bet_amount").as("max_bet"),
+        oi.sum("revenue").as("total_revenue"),
+        oi.sum("cost").as("total_cost"),
+        count().as("total_orders"),
+        avg("revenue").as("avg_revenue"),
+        min("revenue").as("min_revenue"),
+        max("revenue").as("max_revenue"),
 
         // Multi-column countDistinct
-        countDistinct(st.col("player_id")).as("unique_players"),
-        countDistinct(st.col("player_id"), st.col("session_id")).as("unique_sessions"),
+        countDistinct(oi.col("user_id")).as("unique_users"),
+        countDistinct(oi.col("user_id"), oi.col("session_id")).as("unique_sessions"),
 
         // Arithmetic: minus / plus / multiply / divide
-        st.sum("bet_amount").minus(st.sum("win_amount")).as("net_result"),
-        st.sum("bet_amount").minus(st.sum("win_amount"))
-            .divide(st.sum("bet_amount")).multiply("100").as("margin_pct"),
-        st.sum("debit").plus(st.sum("credit")).as("total_flow"),
+        oi.sum("revenue").minus(oi.sum("cost")).as("net_profit"),
+        oi.sum("revenue").minus(oi.sum("cost"))
+            .divide(oi.sum("revenue")).multiply("100").as("margin_pct"),
+        oi.sum("debit").plus(oi.sum("credit")).as("total_flow"),
 
         // Conditional aggregates — fluent
-        sumIf("bet_amount").where("action").eq("BET").as("real_bet"),
-        countIf("player_id").where("is_bonus_round").eq(1).as("bonus_spins"),
-        avgIf("bet_amount").where("status").eq("SETTLED").as("avg_settled_bet"),
-        minIf("win_amount").where("action").eq("WIN").as("min_win"),
-        maxIf("bet_amount").where("vip_tier").in("GOLD", "PLATINUM").as("max_vip_bet"),
+        sumIf("revenue").where("action").eq("SALE").as("actual_sales"),
+        countIf("user_id").where("is_promotion").eq(1).as("promo_orders"),
+        avgIf("revenue").where("status").eq("COMPLETED").as("avg_completed_revenue"),
+        minIf("cost").where("action").eq("PURCHASE").as("min_cost"),
+        maxIf("revenue").where("tier").in("GOLD", "PLATINUM").as("max_premium_revenue"),
 
         // Conditional aggregates — raw
         sumIfRaw("refund_amount", "action = 'REFUND' AND refund_amount > 0").as("total_refund"),
-        countIfRaw("player_id", in("status", "CANCELLED", "ERROR")).as("failed_spins"),
+        countIfRaw("user_id", in("status", "CANCELLED", "ERROR")).as("failed_orders"),
 
         // CASE WHEN: string results, numeric results, between, in, isNull, raw, thenRaw, orElseRaw, end
-        caseWhen("net_result").gt(0).then("PROFITABLE")
-            .when("net_result").eq(0).then("BREAK_EVEN")
+        caseWhen("net_profit").gt(0).then("PROFITABLE")
+            .when("net_profit").eq(0).then("BREAK_EVEN")
             .orElse("LOSS").as("profitability"),
 
-        caseWhen("bet_amount").between(0, 10).then("MICRO")
-            .when("bet_amount").between(10, 100).then("SMALL")
-            .when("bet_amount").between(100, 1000).then("MEDIUM")
-            .orElse("WHALE").as("bet_tier"),
+        caseWhen("revenue").between(0, 10).then("MICRO")
+            .when("revenue").between(10, 100).then("SMALL")
+            .when("revenue").between(100, 1000).then("MEDIUM")
+            .orElse("ENTERPRISE").as("order_tier"),
 
         caseWhen("currency").in("USD", "EUR", "GBP").then("FIAT")
             .orElse("CRYPTO").as("currency_group"),
 
-        caseWhen("promo_code").isNull().then("NO_PROMO")
-            .orElseRaw("promo_code").as("effective_promo"),
+        caseWhen("coupon_code").isNull().then("NO_COUPON")
+            .orElseRaw("coupon_code").as("effective_coupon"),
 
-        caseWhen("action").eq("REFUND").thenRaw("bet_amount")
-            .orElseRaw("bet_amount * -1").as("adjusted_amount"),
+        caseWhen("action").eq("REFUND").thenRaw("revenue")
+            .orElseRaw("revenue * -1").as("adjusted_amount"),
 
         caseWhen("error_code").isNotNull().then("HAS_ERROR")
             .end().as("error_flag")   // no ELSE
     )
 
     // ── FROM + 4 JOIN types ────────────────────────────────────
-    .from("active_games")                                                     // FROM (CTE)
-    .join(st).on(st.col("game_id"), "active_games.game_id")                  // INNER JOIN
-    .leftJoin(p).on(p.col("id"), st.col("player_id"))                        // LEFT JOIN
-    .rightJoin(cfg).on(cfg.col("game_id"), st.col("game_id"))                // RIGHT JOIN
-    .fullJoin(rb).on(rb.col("session_id"), st.col("session_id"))             // FULL OUTER JOIN
+    .from("active_products")                                                    // FROM (CTE)
+    .join(oi).on(oi.col("product_id"), "active_products.product_id")           // INNER JOIN
+    .leftJoin(u).on(u.col("id"), oi.col("user_id"))                           // LEFT JOIN
+    .rightJoin(cfg).on(cfg.col("product_id"), oi.col("product_id"))           // RIGHT JOIN
+    .fullJoin(rb).on(rb.col("session_id"), oi.col("session_id"))              // FULL OUTER JOIN
 
     // ── WHERE: every operator ─────────────────────────────────
-    .where(st.col("operator_id")).eq(operatorId)          // eq (null-safe)
-    .where(st.col("status")).ne("CANCELLED")              // ne
-    .where(st.col("bet_amount")).gt(0)                    // gt
-    .where(st.col("bet_amount")).gte(minBet)              // gte — skipped if null
-    .where(st.col("bet_amount")).lt(maxBet)               // lt  — skipped if null
-    .where(st.col("round_number")).lte(9999)              // lte
-    .where(st.col("created_at")).between(fromDate, toDate)  // between(Instant)
-    .where(st.col("spin_ms")).between(100, 30_000)        // between(Number)
-    .where(st.col("game_id")).in(gameIds)                 // in(Collection) — skipped if empty
-    .where(st.col("player_id")).notIn(blockedPlayers)     // notIn(Collection)
-    .where(st.col("settled_at")).isNotNull()              // isNotNull
-    .where(st.col("error_code")).isNull()                 // isNull
-    .where(g.col("game_type")).eqIfNotBlank(gameTypeFilter)  // eqIfNotBlank
-    .where(st.col("is_free_spin")).eqIf(freespinOnly, 1)    // eqIf
-    .where(p.col("id")).in(                               // in(subquery)
-        ClickHouseQuery.select("player_id").from("vip_list")
-            .where("operator_id").eq(operatorId)
+    .where(oi.col("tenant_id")).eq(tenantId)              // eq (null-safe)
+    .where(oi.col("status")).ne("CANCELLED")              // ne
+    .where(oi.col("revenue")).gt(0)                       // gt
+    .where(oi.col("revenue")).gte(minRevenue)             // gte — skipped if null
+    .where(oi.col("revenue")).lt(maxRevenue)              // lt  — skipped if null
+    .where(oi.col("line_number")).lte(9999)               // lte
+    .where(oi.col("created_at")).between(fromDate, toDate)  // between(Instant)
+    .where(oi.col("processing_ms")).between(100, 30_000)    // between(Number)
+    .where(oi.col("product_id")).in(productIds)           // in(Collection) — skipped if empty
+    .where(oi.col("user_id")).notIn(blockedUsers)         // notIn(Collection)
+    .where(oi.col("completed_at")).isNotNull()            // isNotNull
+    .where(oi.col("error_code")).isNull()                 // isNull
+    .where(p.col("category")).eqIfNotBlank(categoryFilter)  // eqIfNotBlank
+    .where(oi.col("is_sample")).eqIf(sampleOnly, 1)         // eqIf
+    .where(u.col("id")).in(                               // in(subquery)
+        ClickHouseQuery.select("user_id").from("premium_list")
+            .where("tenant_id").eq(tenantId)
     )
-    .where(p.col("id")).notIn(                            // notIn(subquery)
-        ClickHouseQuery.select("player_id").from("blocked_players")
+    .where(u.col("id")).notIn(                            // notIn(subquery)
+        ClickHouseQuery.select("user_id").from("blocked_users")
             .where("active").eq(1)
     )
-    .whereRaw("toYYYYMM(st.created_at) = toYYYYMM(now())")  // whereRaw
-    .whereILike(keyword).on(p.col("username"), st.col("session_id"))   // ILIKE multi-col
-    .whereLike(sessionPrefix).onPrefix(st.col("session_id"))           // LIKE prefix (index-friendly)
+    .whereRaw("toYYYYMM(oi.created_at) = toYYYYMM(now())")  // whereRaw
+    .whereILike(keyword).on(u.col("username"), oi.col("session_id"))   // ILIKE multi-col
+    .whereLike(sessionPrefix).onPrefix(oi.col("session_id"))           // LIKE prefix (index-friendly)
     .whereOr(or -> or                                     // OR group — all operators
-        .where(st.col("action")).eq("MANUAL_CREDIT")
-        .where(st.col("status")).ne("VOID")
-        .where(st.col("bet_amount")).gt(10_000)
-        .where(st.col("win_amount")).gte(50_000)
-        .where(st.col("round_ms")).lt(500)
-        .where(st.col("round_ms")).lte(1_000)
-        .where(st.col("game_id")).in(List.of("g1", "g2"))
-        .where(st.col("player_id")).notIn(vipExclusions)
-        .where(st.col("promo_code")).isNull()
-        .where(st.col("bonus_id")).isNotNull()
-        .where(st.col("bet_amount")).between(500, 5_000)  // between inside OR
-        .whereILike(keyword).on("session_id", "player_id")// ILIKE inside OR
-        .addRaw("st.is_jackpot = 1")                      // raw inside OR
+        .where(oi.col("action")).eq("MANUAL_CREDIT")
+        .where(oi.col("status")).ne("VOID")
+        .where(oi.col("revenue")).gt(10_000)
+        .where(oi.col("cost")).gte(50_000)
+        .where(oi.col("latency_ms")).lt(500)
+        .where(oi.col("latency_ms")).lte(1_000)
+        .where(oi.col("product_id")).in(List.of("p1", "p2"))
+        .where(oi.col("user_id")).notIn(premiumExclusions)
+        .where(oi.col("coupon_code")).isNull()
+        .where(oi.col("discount_id")).isNotNull()
+        .where(oi.col("revenue")).between(500, 5_000)     // between inside OR
+        .whereILike(keyword).on("session_id", "user_id")  // ILIKE inside OR
+        .addRaw("oi.is_featured = 1")                     // raw inside OR
     )
 
     // ── GROUP BY + HAVING ─────────────────────────────────────
-    .groupBy(st.col("operator_id"), g.col("game_name"), p.col("currency"))
-    .having(sum("bet_amount")).gt(1_000)
+    .groupBy(oi.col("tenant_id"), p.col("product_name"), u.col("currency"))
+    .having(sum("revenue")).gt(1_000)
     .having(count()).gte(10)
-    .having(avg("bet_amount")).between(5, 50_000)
-    .havingRaw("sum(win_amount) < sum(bet_amount) * 0.99")
+    .having(avg("revenue")).between(5, 50_000)
+    .havingRaw("sum(cost) < sum(revenue) * 0.99")
 
     // ── ORDER BY (multiple columns) ───────────────────────────
-    .orderBy("total_bet", SortOrder.DESC)
-    .orderBy(g.col("game_name"), SortOrder.ASC)
+    .orderBy("total_revenue", SortOrder.DESC)
+    .orderBy(p.col("product_name"), SortOrder.ASC)
 
     // ── PAGINATED EXECUTION: data + total count in ONE query ──
-    .queryPage(page, pageSize, namedJdbc, GameStatReport.class);
+    .queryPage(page, pageSize, namedJdbc, SalesReport.class);
 
 // Page result
-List<GameStatReport> data = report.getData();
+List<SalesReport> data = report.getData();
 long total                = report.getTotal();
 int  totalPages           = report.getTotalPages();
 boolean hasNext           = report.hasNext();
@@ -178,42 +178,42 @@ boolean hasPrev           = report.hasPrevious();
 // ══════════════════════════════════════════════════════════════════
 List<String> currencies = ClickHouseQuery
     .selectDistinct("currency")
-    .from("spin_transactions")
-    .where("operator_id").eq(operatorId)
+    .from("order_items")
+    .where("tenant_id").eq(tenantId)
     .query(namedJdbc, String.class);
 
 
 // ══════════════════════════════════════════════════════════════════
 // 4. UNION ALL — combine partitioned tables
 // ══════════════════════════════════════════════════════════════════
-List<SessionSummary> history = ClickHouseQuery
-    .select("player_id", sum("bet_amount").as("total"))
-    .from("spin_transactions_2024").where("operator_id").eq(operatorId).groupBy("player_id")
+List<UserSummary> history = ClickHouseQuery
+    .select("user_id", sum("revenue").as("total"))
+    .from("order_items_2024").where("tenant_id").eq(tenantId).groupBy("user_id")
     .unionAll(
-        ClickHouseQuery.select("player_id", sum("bet_amount").as("total"))
-            .from("spin_transactions_2025").where("operator_id").eq(operatorId).groupBy("player_id")
+        ClickHouseQuery.select("user_id", sum("revenue").as("total"))
+            .from("order_items_2025").where("tenant_id").eq(tenantId).groupBy("user_id")
     )
     .orderBy("total", SortOrder.DESC)
     .limit(100)
-    .query(namedJdbc, SessionSummary.class);
+    .query(namedJdbc, UserSummary.class);
 
 
 // ══════════════════════════════════════════════════════════════════
 // 5. SUBQUERY FROM — derived table
 // ══════════════════════════════════════════════════════════════════
-List<PlayerRankRow> ranked = ClickHouseQuery
-    .select(sub.col("player_id"), sub.col("total"),
+List<UserRankRow> ranked = ClickHouseQuery
+    .select(sub.col("user_id"), sub.col("total"),
             "rank() OVER (ORDER BY total DESC) AS rank")
     .from(
-        ClickHouseQuery.select("player_id", sum("bet_amount").as("total"))
-            .from("spin_transactions").where("operator_id").eq(operatorId)
-            .groupBy("player_id"),
+        ClickHouseQuery.select("user_id", sum("revenue").as("total"))
+            .from("order_items").where("tenant_id").eq(tenantId)
+            .groupBy("user_id"),
         sub
     )
     .where(sub.col("total")).gt(minTotal)
     .orderBy("rank", SortOrder.ASC)
     .limit(50)
-    .query(namedJdbc, PlayerRankRow.class);
+    .query(namedJdbc, UserRankRow.class);
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -221,41 +221,41 @@ List<PlayerRankRow> ranked = ClickHouseQuery
 // ══════════════════════════════════════════════════════════════════
 // Single DTO (returns null if no rows)
 DailySummary today = ClickHouseQuery
-    .select(sum("bet_amount").as("total_bet"), count().as("total_spins"))
-    .from("spin_transactions")
-    .where("operator_id").eq(operatorId)
+    .select(sum("revenue").as("total_revenue"), count().as("total_orders"))
+    .from("order_items")
+    .where("tenant_id").eq(tenantId)
     .where("created_at").between(Instant.now().minus(1, ChronoUnit.DAYS), Instant.now())
     .queryOne(namedJdbc, DailySummary.class);
 
 // Terminal .count() on the query itself
 long totalRows = ClickHouseQuery.select("1")
-    .from("spin_transactions")
-    .where("operator_id").eq(operatorId)
+    .from("order_items")
+    .where("tenant_id").eq(tenantId)
     .count(namedJdbc);
 
 // Static ClickHouseQuery.count(subQuery)
 long distinctSessions = ClickHouseQuery.count(
-    ClickHouseQuery.select("player_id", "session_id")
-        .from("spin_transactions").where("operator_id").eq(operatorId)
-        .groupBy("player_id", "session_id")
+    ClickHouseQuery.select("user_id", "session_id")
+        .from("order_items").where("tenant_id").eq(tenantId)
+        .groupBy("user_id", "session_id")
 ).execute(namedJdbc);
 
 
 // ══════════════════════════════════════════════════════════════════
 // 7. INSERT batch with CHParams — every param type
 // ══════════════════════════════════════════════════════════════════
-ClickHouseInsert.into("spin_transactions")
-    .columns("id", "operator_id", "player_id", "game_id", "action",
-             "bet_amount", "win_amount", "status", "currency",
+ClickHouseInsert.into("order_items")
+    .columns("id", "tenant_id", "user_id", "product_id", "action",
+             "revenue", "cost", "status", "currency",
              "tags", "created_at", "session_id")
-    .executeBatch(namedJdbc, incomingSpins, tx -> CHParams.of()
+    .executeBatch(namedJdbc, incomingOrders, tx -> CHParams.of()
         .set("id",           tx.getId())                               // set (any value)
-        .set("operatorId",   tx.getOperatorId())
-        .set("playerId",     tx.getPlayerId())
-        .set("gameId",       tx.getGameId())
+        .set("tenantId",     tx.getTenantId())
+        .set("userId",       tx.getUserId())
+        .set("productId",    tx.getProductId())
         .setEnum("action",   tx.getAction())                          // Enum → name()
-        .setOrDefault("betAmount", tx.getBetAmount(), BigDecimal.ZERO) // null-safe default
-        .setOrDefault("winAmount", tx.getWinAmount(), BigDecimal.ZERO)
+        .setOrDefault("revenue", tx.getRevenue(), BigDecimal.ZERO)    // null-safe default
+        .setOrDefault("cost", tx.getCost(), BigDecimal.ZERO)
         .setEnum("status",   tx.getStatus())
         .set("currency",     tx.getCurrency())
         .setArray("tags",    tx.getTags(), String.class)              // List → SQL ARRAY
@@ -286,7 +286,7 @@ ClickHouseInsert.into("spin_transactions")
 | 11 | **CASE WHEN** | `caseWhen("col").gt(0).then("HIGH").orElse("LOW").as("level")` |
 | 12 | **Expression builder** | `CH.sum()`, `CH.count()`, `CH.avg()`, `CH.min()`, `CH.max()` |
 | 13 | **Conditional aggregates** | `CH.sumIf()`, `CH.countIf()`, `CH.avgIf()`, `CH.minIf()`, `CH.maxIf()` |
-| 14 | **Fluent arithmetic** | `sum("bet").minus(sum("cost")).divide(100)` / `.plus()` / `.multiply()` |
+| 14 | **Fluent arithmetic** | `sum("revenue").minus(sum("cost")).divide(100)` / `.plus()` / `.multiply()` |
 | 15 | **Multi-column countDistinct** | `countDistinct(col1, col2).as("unique")` → `count(DISTINCT (col1, col2))` |
 | 16 | **Fluent Subquery** | `.where("col").in(ClickHouseQuery.select(...))` |
 | 17 | **Subquery FROM** | `.from(ClickHouseQuery.select(...)).as("alias")` |
@@ -383,10 +383,10 @@ ClickHouseQuery.select(
 | Method | Return | Output |
 |---|---|---|
 | `orders.col("amount")` | `Expr` | `orders.amount` — for SELECT, WHERE, JOIN, GROUP BY |
-| `orders.col("amount").as("bet")` | `Expr` | `orders.amount AS bet` |
-| `orders.col("bet").minus(orders.col("cost")).as("net")` | `Expr` | `orders.bet - orders.cost AS net` |
+| `orders.col("amount").as("total")` | `Expr` | `orders.amount AS total` |
+| `orders.col("revenue").minus(orders.col("cost")).as("net")` | `Expr` | `orders.revenue - orders.cost AS net` |
 | `orders.sum("amount")` | `Expr` | `sum(orders.amount)` |
-| `orders.sum("bet").minus(orders.sum("cost")).as("net")` | `Expr` | `sum(orders.bet) - sum(orders.cost) AS net` |
+| `orders.sum("revenue").minus(orders.sum("cost")).as("net")` | `Expr` | `sum(orders.revenue) - sum(orders.cost) AS net` |
 | `orders.count("id")` | `Expr` | `count(orders.id)` |
 | `orders.countDistinct("id")` | `Expr` | `countDistinct(orders.id)` |
 | `orders.min("created_at")` | `Expr` | `min(orders.created_at)` |
@@ -492,12 +492,12 @@ ClickHouseQuery.select("*")
         .where("status").eq("PENDING")           //   OR status = 'PENDING'
     )                                            // )
     .whereOr(or -> or                            // AND (
-        .where("type").in(List.of("VIP"))        //   type IN ('VIP')
+        .where("type").in(List.of("PREMIUM"))    //   type IN ('PREMIUM')
         .where("amount").gt(5000)                //   OR amount > 5000
         .where("name").ilike("john")             //   OR name ILIKE '%john%'
         .where("deleted_at").isNull()            //   OR deleted_at IS NULL
         .where("user_id").in(                    //   OR user_id IN (subquery)
-            ClickHouseQuery.select("id").from("vip_users")
+            ClickHouseQuery.select("id").from("premium_users")
         )
     )                                            // )
     .query(namedJdbc, Order.class);
@@ -594,19 +594,19 @@ Chain arithmetic operations on any `Expr` returned by `sum()`, `col()`, `count()
 ```java
 import static lib.core.clickhouse.expression.CH.*;
 
-Alias st = Alias.of("spin_transactions");
+Alias oi = Alias.of("order_items");
 
 // sum().minus(sum()) — aggregate arithmetic
-st.sum("bet_amount").minus(st.sum("win_amount")).as("net_result")
-// → sum(spin_transactions.bet_amount) - sum(spin_transactions.win_amount) AS net_result
+oi.sum("revenue").minus(oi.sum("cost")).as("net_profit")
+// → sum(order_items.revenue) - sum(order_items.cost) AS net_profit
 
 // col().minus(col()) — column arithmetic
-st.col("bet_amount").minus(st.col("win_amount")).as("net_result")
-// → spin_transactions.bet_amount - spin_transactions.win_amount AS net_result
+oi.col("revenue").minus(oi.col("cost")).as("net_profit")
+// → order_items.revenue - order_items.cost AS net_profit
 
 // Plus
-st.sum("debit").plus(st.sum("credit")).as("total")
-// → sum(spin_transactions.debit) + sum(spin_transactions.credit) AS total
+oi.sum("debit").plus(oi.sum("credit")).as("total")
+// → sum(order_items.debit) + sum(order_items.credit) AS total
 ```
 
 ### 10. Multi-Column `countDistinct`
@@ -616,10 +616,10 @@ Count distinct combinations of multiple columns:
 ```java
 import static lib.core.clickhouse.expression.CH.*;
 
-Alias st = Alias.of("spin_transactions");
+Alias oi = Alias.of("order_items");
 
-countDistinct(st.col("user_id"), st.col("session_id")).as("total_sessions")
-// → count(DISTINCT (spin_transactions.user_id, spin_transactions.session_id)) AS total_sessions
+countDistinct(oi.col("user_id"), oi.col("session_id")).as("total_sessions")
+// → count(DISTINCT (order_items.user_id, order_items.session_id)) AS total_sessions
 ```
 
 ### 11. Expression Builder & Conditional Aggregates
@@ -631,20 +631,20 @@ import static lib.core.clickhouse.expression.CH.*;
 
 ClickHouseQuery.select(
     col("product_id"),
-    sumIf("amount").where("action").eq("BET").as("total_bet"),
+    sumIf("amount").where("action").eq("SALE").as("total_sales"),
     countIf("user_id").where("status").eq("ACTIVE").as("active_count"),
-    minIf("amount").where("type").eq("SALE").as("min_sale"),
-    maxIf("amount").where("score").gt(100).as("max_sale"),
+    minIf("amount").where("type").eq("PURCHASE").as("min_purchase"),
+    maxIf("amount").where("score").gt(100).as("max_order"),
     avgIf("score").where("status").isNotNull().as("avg_score"),
-    countIf("user_id").where("status").in("VIP", "PREMIUM").as("premium_count")
+    countIf("user_id").where("tier").in("GOLD", "PREMIUM").as("premium_count")
 ).from("orders").groupBy("product_id");
 ```
 
 **Raw (explicit):**
 
 ```java
-sumIfRaw("amount", "action = 'BET'").as("total_bet")
-countIfRaw("user_id", in("status", "VIP", "PREMIUM")).as("premium_count")
+sumIfRaw("amount", "action = 'SALE'").as("total_sales")
+countIfRaw("user_id", in("tier", "GOLD", "PREMIUM")).as("premium_count")
 ```
 
 ### 12. HAVING with Aggregates

@@ -12,7 +12,7 @@ package lib.core.clickhouse.expression;
  *     countDistinct("order_id").as("total_orders"),
  *     countDistinct("user_id", "session_id").as("unique_sessions"),   // multi-column
  *     sum("amount").as("total_revenue"),
- *     sum("bet").minus(sum("win")).as("net_result"),                   // arithmetic
+ *     sum("revenue").minus(sum("cost")).as("net_result"),              // arithmetic
  *     sumIf("amount", "type = 'SALE'").as("total_revenue"),
  *     sumIf("amount", in("action", "SALE", "UPSELL")).as("total_sales"),
  *     min("created_at").as("first_ts"),
@@ -161,7 +161,7 @@ public final class CH {
         return new AggIfBuilder("sumIf", column);
     }
 
-    /** Fluent countIf: {@code countIf("user_id").where("type").eq("VIP")} */
+    /** Fluent countIf: {@code countIf("user_id").where("type").eq("PREMIUM")} */
     public static AggIfBuilder countIf(String column) {
         return new AggIfBuilder("countIf", column);
     }
@@ -261,13 +261,13 @@ public final class CH {
      *
      * ClickHouseQuery.select(
      *     col("user_id"),
-     *     caseWhen("amount").gt(0).then("WIN")
-     *         .when("amount").eq(0).then("DRAW")
-     *         .orElse("LOSE")
+     *     caseWhen("amount").gt(0).then("PROFIT")
+     *         .when("amount").eq(0).then("NEUTRAL")
+     *         .orElse("LOSS")
      *         .as("result"),
-     *     caseWhen("action").eq("BET").then(1)
+     *     caseWhen("action").eq("SALE").then(1)
      *         .orElse(0)
-     *         .as("is_bet")
+     *         .as("is_sale")
      * )
      * }</pre>
      *

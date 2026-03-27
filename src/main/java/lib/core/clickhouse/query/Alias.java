@@ -80,7 +80,7 @@ public final class Alias {
 
     // ── CH expression shortcuts ─────────────────────────────────────────
 
-    /** {@code col(alias.column)} → returns an Expr for fluent chaining like {@code st.col("amount").as("bet")} */
+    /** {@code col(alias.column)} → returns an Expr for fluent chaining like {@code o.col("amount").as("total")} */
     public CH.Expr col(String column) {
         return new CH.Expr(c(column));
     }
@@ -125,7 +125,7 @@ public final class Alias {
         return CH.sumIf(c(column));
     }
 
-    /** Fluent: {@code countIf(alias.column).where("type").eq("VIP")} */
+    /** Fluent: {@code countIf(alias.column).where("type").eq("PREMIUM")} */
     public AggIfBuilder countIf(String column) {
         return CH.countIf(c(column));
     }

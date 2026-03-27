@@ -15,7 +15,7 @@ import lib.core.clickhouse.query.ClickHouseQuery;
  * // Chained equality conditions (via .and())
  * .join("wallet_transaction wt")
  *     .on("st.user_id", "wt.user_id")
- *     .and("st.spin_id", "wt.round_id")
+ *     .and("o.order_id", "wt.transaction_id")
  *
  * // Raw condition (complex cases)
  * .join("user_profile u").on("u.id = t.user_id AND u.active = 1")

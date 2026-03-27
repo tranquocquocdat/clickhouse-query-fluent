@@ -85,9 +85,9 @@ public final class OrBuilder {
      * <pre>{@code
      * .whereOr(or -> or
      *     .where("status").eq("ACTIVE")
-     *     .whereILike("keyword").on("session_id", "user_id", "spin_id")
+     *     .whereILike("keyword").on("session_id", "user_id", "order_id")
      * )
-     * // → (status = :_or0 OR session_id ILIKE :_or1 OR user_id ILIKE :_or2 OR spin_id ILIKE :_or3)
+     * // → (status = :_or0 OR session_id ILIKE :_or1 OR user_id ILIKE :_or2 OR order_id ILIKE :_or3)
      * }</pre>
      */
     public OrILikeBuilder whereILike(String keyword) {
