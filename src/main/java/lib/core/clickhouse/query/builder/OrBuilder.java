@@ -75,10 +75,47 @@ public final class OrBuilder {
         return this;
     }
 
+    /**
+     * Fluent ILIKE search on multiple columns inside an OR group.
+     * <pre>{@code
+     * .whereOr(or -> or
+     *     .where("status").eq("ACTIVE")
+     *     .whereILike("keyword").on("session_id", "user_id", "spin_id")
+     * )
+     * // → (status = :_or0 OR session_id ILIKE :_or1 OR user_id ILIKE :_or2 OR spin_id ILIKE :_or3)
+     * }</pre>
+     */
+    public OrILikeBuilder whereILike(String keyword) {
+        return new OrILikeBuilder(this, keyword);
+    }
+
     /** Apply all conditions as a single OR group to the parent query's WHERE. */
     public void apply() {
         if (!conditions.isEmpty()) {
             query.whereClauses.add("(" + String.join(" OR ", conditions) + ")");
+        }
+    }
+
+    /** Inner builder for ILIKE on multiple columns inside OR group. */
+    public static final class OrILikeBuilder {
+        private final OrBuilder or;
+        private final String keyword;
+
+        OrILikeBuilder(OrBuilder or, String keyword) {
+            this.or = or;
+            this.keyword = keyword;
+        }
+
+        /** Specify columns to search with ILIKE. Skipped when keyword is null/blank. */
+        public OrBuilder on(String... columns) {
+            if (keyword == null || keyword.isBlank()) return or;
+            String trimmed = keyword.trim();
+            for (String col : columns) {
+                String p = or.nextParam();
+                or.conditions.add(col + " ILIKE :" + p);
+                or.query.params.addValue(p, "%" + trimmed + "%");
+            }
+            return or;
         }
     }
 
