@@ -80,6 +80,20 @@ public final class CH {
             return new Expr("(" + expression + ") / (" + raw + ")");
         }
 
+        /**
+         * Start a window expression: {@code expr OVER(...)}.
+         *
+         * <pre>{@code
+         * CH.sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total")
+         * CH.rowNumber().over().orderBy("amount", SortOrder.DESC).as("rank")
+         * }</pre>
+         *
+         * @return a {@link WindowBuilder} for specifying PARTITION BY / ORDER BY
+         */
+        public WindowBuilder over() {
+            return new WindowBuilder(expression);
+        }
+
         /** Return raw expression without alias. */
         @Override
         public String toString() {
@@ -98,6 +112,48 @@ public final class CH {
         public int hashCode() {
             return expression.hashCode();
         }
+    }
+
+    // ── Column / Raw expression ──────────────────────────────────────────
+
+    /**
+     * Wrap a column name as a type-safe {@link Expr}.
+     * Use this instead of raw strings for type-safe column references.
+     *
+     * <pre>{@code
+     * CH.col("user_id")       // → Expr("user_id")
+     * CH.col("amount").as("total") // → Expr("amount AS total")
+     * }</pre>
+     *
+     * @param column the column name
+     * @return an Expr wrapping the column name
+     */
+    public static Expr col(String column) {
+        return new Expr(column);
+    }
+
+    /**
+     * Wrap a column name with an alias.
+     * {@code CH.col("user_id", "uid")} → {@code user_id AS uid}
+     */
+    public static Expr col(String column, String alias) {
+        return new Expr(column + " AS " + alias);
+    }
+
+    /**
+     * Wrap a raw SQL expression as a type-safe {@link Expr}.
+     * Use for expressions that don't map to a simple column or aggregate.
+     *
+     * <pre>{@code
+     * CH.raw("toYYYYMM(created_at)")
+     * CH.raw("1")
+     * }</pre>
+     *
+     * @param expression raw SQL expression
+     * @return an Expr wrapping the expression
+     */
+    public static Expr raw(String expression) {
+        return new Expr(expression);
     }
 
     // ── Aggregation ─────────────────────────────────────────────────────
@@ -223,15 +279,73 @@ public final class CH {
         return new Expr("avg(" + column + ")");
     }
 
-    // ── Column expressions ──────────────────────────────────────────────
+    // ── Window functions ────────────────────────────────────────────────
 
-    /** Plain column name (for readability in select). */
-    public static String col(String column) {
+    /** {@code row_number()} — assign sequential number to each row within partition. */
+    public static Expr rowNumber() {
+        return new Expr("row_number()");
+    }
+
+    /** {@code rank()} — assign rank with gaps for ties. */
+    public static Expr rank() {
+        return new Expr("rank()");
+    }
+
+    /** {@code dense_rank()} — assign rank without gaps for ties. */
+    public static Expr denseRank() {
+        return new Expr("dense_rank()");
+    }
+
+    /** {@code lag(column, 1)} — access the previous row value. */
+    public static Expr lag(String column) {
+        return new Expr("lag(" + column + ", 1)");
+    }
+
+    /** {@code lag(column, offset)} — access value N rows before. */
+    public static Expr lag(String column, int offset) {
+        return new Expr("lag(" + column + ", " + offset + ")");
+    }
+
+    /** {@code lead(column, 1)} — access the next row value. */
+    public static Expr lead(String column) {
+        return new Expr("lead(" + column + ", 1)");
+    }
+
+    /** {@code lead(column, offset)} — access value N rows after. */
+    public static Expr lead(String column, int offset) {
+        return new Expr("lead(" + column + ", " + offset + ")");
+    }
+
+    /** {@code first_value(column)} — first value in the window frame. */
+    public static Expr firstValue(String column) {
+        return new Expr("first_value(" + column + ")");
+    }
+
+    /** {@code last_value(column)} — last value in the window frame. */
+    public static Expr lastValue(String column) {
+        return new Expr("last_value(" + column + ")");
+    }
+
+    /** {@code ntile(n)} — divide partition into N buckets. */
+    public static Expr ntile(int n) {
+        return new Expr("ntile(" + n + ")");
+    }
+
+    // ── Column expressions (deprecated — use the Expr-returning versions above) ──
+
+    /**
+     * @deprecated Replaced by {@link #col(String)} returning {@link Expr} above.
+     */
+    @Deprecated
+    public static String colStr(String column) {
         return column;
     }
 
-    /** {@code column AS alias} */
-    public static String col(String column, String alias) {
+    /**
+     * @deprecated Replaced by {@link #col(String, String)} returning {@link Expr} above.
+     */
+    @Deprecated
+    public static String colStr(String column, String alias) {
         return column + " AS " + alias;
     }
 

@@ -97,15 +97,15 @@ class CHTest {
     }
 
     @Test
-    @DisplayName("col() returns column name as-is")
+    @DisplayName("col() returns Expr wrapping column name")
     void col() {
-        assertEquals("user_id", CH.col("user_id"));
+        assertEquals("user_id", CH.col("user_id").toString());
     }
 
     @Test
     @DisplayName("col(column, alias) generates column AS alias")
     void colWithAlias() {
-        assertEquals("user_id AS uid", CH.col("user_id", "uid"));
+        assertEquals("user_id AS uid", CH.col("user_id", "uid").toString());
     }
 
     @Test

@@ -101,6 +101,7 @@ public final class ClickHouseQuery {
     public final List<String> orderByClauses = new ArrayList<>();
     public Integer limitVal;
     public Long offsetVal;
+    public String groupByModifier;
 
     // Subquery FROM
     private ClickHouseQuery fromSubQuery;
@@ -135,7 +136,9 @@ public final class ClickHouseQuery {
      *
      * @param columns column names or expressions (e.g. {@code "user_id"}, {@code "sum(amount) AS total"})
      * @return a new query builder in the SELECT phase
+     * @deprecated Use {@code select(alias.col("col"), CH.sum("col").as("total"))} instead of raw strings.
      */
+    @Deprecated
     public static ClickHouseQuery select(String... columns) {
         ClickHouseQuery q = new ClickHouseQuery();
         q.selectColumns.addAll(List.of(columns));
@@ -156,7 +159,9 @@ public final class ClickHouseQuery {
      *
      * @param columns column names or expressions
      * @return a new query builder in the SELECT phase with DISTINCT
+     * @deprecated Use {@code selectDistinct(alias.col("col"))} instead of raw strings.
      */
+    @Deprecated
     public static ClickHouseQuery selectDistinct(String... columns) {
         ClickHouseQuery q = new ClickHouseQuery();
         q.distinct = true;
@@ -213,7 +218,9 @@ public final class ClickHouseQuery {
      * @param table the table name (e.g. {@code "orders"})
      * @return this query builder
      * @throws IllegalStateException if called after FROM phase
+     * @deprecated Use {@code from(Alias.of("table"))} for type-safe table references.
      */
+    @Deprecated
     public ClickHouseQuery from(String table) {
         advanceTo(Phase.FROM);
         this.tableName = table;
@@ -315,7 +322,9 @@ public final class ClickHouseQuery {
      *
      * @param table the table to join (e.g. {@code "user_profile u"})
      * @return a {@link JoinBuilder} for specifying the ON condition
+     * @deprecated Use {@code join(Alias)} instead of raw string.
      */
+    @Deprecated
     public JoinBuilder join(String table) {
         advanceTo(Phase.JOIN);
         return new JoinBuilder(this, "JOIN", table);
@@ -331,7 +340,9 @@ public final class ClickHouseQuery {
      * <pre>{@code
      * .leftJoin("settings s").on("s.user_id = t.user_id")
      * }</pre>
+     * @deprecated Use {@code leftJoin(Alias)} instead of raw string.
      */
+    @Deprecated
     public JoinBuilder leftJoin(String table) {
         advanceTo(Phase.JOIN);
         return new JoinBuilder(this, "LEFT JOIN", table);
@@ -347,7 +358,9 @@ public final class ClickHouseQuery {
      * <pre>{@code
      * .rightJoin("other o").on("o.id = t.other_id")
      * }</pre>
+     * @deprecated Use {@code rightJoin(Alias)} instead of raw string.
      */
+    @Deprecated
     public JoinBuilder rightJoin(String table) {
         advanceTo(Phase.JOIN);
         return new JoinBuilder(this, "RIGHT JOIN", table);
@@ -363,7 +376,9 @@ public final class ClickHouseQuery {
      * <pre>{@code
      * .fullJoin("other o").on("o.id = t.other_id")
      * }</pre>
+     * @deprecated Use {@code fullJoin(Alias)} instead of raw string.
      */
+    @Deprecated
     public JoinBuilder fullJoin(String table) {
         advanceTo(Phase.JOIN);
         return new JoinBuilder(this, "FULL OUTER JOIN", table);
@@ -388,7 +403,9 @@ public final class ClickHouseQuery {
      *
      * @param column the column name
      * @return a {@link WhereBuilder} for chaining the comparison operator
+     * @deprecated Use {@code where(alias.col("column"))} for type-safe column references.
      */
+    @Deprecated
     public WhereBuilder where(String column) {
         advanceTo(Phase.WHERE);
         return new WhereBuilder(this, column);
@@ -477,7 +494,9 @@ public final class ClickHouseQuery {
      * @param columns columns to group by
      * @return this query builder
      * @throws IllegalStateException if called after GROUP_BY phase
+     * @deprecated Use {@code groupBy(alias.col("col"))} for type-safe column references.
      */
+    @Deprecated
     public ClickHouseQuery groupBy(String... columns) {
         advanceTo(Phase.GROUP_BY);
         this.groupByColumns.addAll(List.of(columns));
@@ -491,6 +510,78 @@ public final class ClickHouseQuery {
         String[] strs = new String[columns.length];
         for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
         return groupBy(strs);
+    }
+
+    /**
+     * GROUP BY with WITH TOTALS modifier.
+     * Adds an extra row containing summary across all groups.
+     *
+     * <pre>{@code
+     * .groupByWithTotals("game_id", "operator_id")
+     * // → GROUP BY game_id, operator_id WITH TOTALS
+     * }</pre>
+     * @deprecated Use {@code groupByWithTotals(alias.col("col"))} for type-safe references.
+     */
+    @Deprecated
+    public ClickHouseQuery groupByWithTotals(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH TOTALS";
+        return this;
+    }
+
+    /** GROUP BY WITH TOTALS accepting Expr or String. */
+    public ClickHouseQuery groupByWithTotals(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return groupByWithTotals(strs);
+    }
+
+    /**
+     * GROUP BY with WITH ROLLUP modifier.
+     * Creates hierarchical subtotals from right to left.
+     *
+     * <pre>{@code
+     * .groupByWithRollup("operator_id", "game_id")
+     * // → GROUP BY operator_id, game_id WITH ROLLUP
+     * }</pre>
+     * @deprecated Use {@code groupByWithRollup(alias.col("col"))} for type-safe references.
+     */
+    @Deprecated
+    public ClickHouseQuery groupByWithRollup(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH ROLLUP";
+        return this;
+    }
+
+    /** GROUP BY WITH ROLLUP accepting Expr or String. */
+    public ClickHouseQuery groupByWithRollup(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return groupByWithRollup(strs);
+    }
+
+    /**
+     * GROUP BY with WITH CUBE modifier.
+     * Creates subtotals for all combinations of dimensions.
+     *
+     * <pre>{@code
+     * .groupByWithCube("operator_id", "game_id")
+     * // → GROUP BY operator_id, game_id WITH CUBE
+     * }</pre>
+     * @deprecated Use {@code groupByWithCube(alias.col("col"))} for type-safe references.
+     */
+    @Deprecated
+    public ClickHouseQuery groupByWithCube(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH CUBE";
+        return this;
+    }
+
+    /** GROUP BY WITH CUBE accepting Expr or String. */
+    public ClickHouseQuery groupByWithCube(Object... columns) {
+        String[] strs = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        return groupByWithCube(strs);
     }
 
     // ── HAVING (fluent) ──────────────────────────────────────────────────
@@ -534,14 +625,19 @@ public final class ClickHouseQuery {
      * @param column    the column to order by
      * @param direction {@link SortOrder#ASC} or {@link SortOrder#DESC}
      * @return this query builder
+     * @deprecated Use {@code orderBy(alias.col("col"), SortOrder.DESC)} for type-safe references.
      */
+    @Deprecated
     public ClickHouseQuery orderBy(String column, SortOrder direction) {
         advanceTo(Phase.ORDER_BY);
         this.orderByClauses.add(column + " " + direction.name());
         return this;
     }
 
-    /** ORDER BY column ASC. */
+    /** ORDER BY column ASC.
+     * @deprecated Use {@code orderBy(alias.col("col"))} instead.
+     */
+    @Deprecated
     public ClickHouseQuery orderBy(String column) {
         return orderBy(column, SortOrder.ASC);
     }
@@ -663,6 +759,9 @@ public final class ClickHouseQuery {
         // GROUP BY
         if (!groupByColumns.isEmpty()) {
             sql.append("\nGROUP BY ").append(String.join(", ", groupByColumns));
+            if (groupByModifier != null) {
+                sql.append(" ").append(groupByModifier);
+            }
         }
 
         // HAVING
@@ -897,25 +996,65 @@ public final class ClickHouseQuery {
     /**
      * Log the generated SQL and parameters.
      * <ul>
-     *   <li><b>DEBUG</b> — logs the SQL statement</li>
-     *   <li><b>TRACE</b> — also logs the bound parameter values</li>
+     *   <li><b>DEBUG</b> — logs the resolved SQL (params replaced with actual values,
+     *       ready to copy-paste into ClickHouse client)</li>
+     *   <li><b>TRACE</b> — also logs raw SQL with named params + param map</li>
      * </ul>
      *
      * <p>Enable in your {@code application.yml}:
      * <pre>{@code
      * logging:
      *   level:
-     *     lib.core.clickhouse.query.ClickHouseQuery: DEBUG   # SQL only
-     *     lib.core.clickhouse.query.ClickHouseQuery: TRACE   # SQL + params
+     *     lib.core.clickhouse.query.ClickHouseQuery: DEBUG   # resolved SQL
+     *     lib.core.clickhouse.query.ClickHouseQuery: TRACE   # + raw SQL + params
      * }</pre>
      */
     private void logQuery(String sql) {
         if (log.isDebugEnabled()) {
-            log.debug("\n╔══ ClickHouse Query ══════════════════════════════════════\n{}\n╚═════════════════════════════════════════════════════════", sql);
+            String resolved = resolveParams(sql, params);
+            log.debug("\n╔══ ClickHouse Query ══════════════════════════════════════\n{}\n╚═════════════════════════════════════════════════════════", resolved);
         }
         if (log.isTraceEnabled()) {
-            log.trace("Query params: {}", params.getValues());
+            log.trace("Raw SQL: {}", sql);
+            log.trace("Params:  {}", params.getValues());
         }
+    }
+
+    /**
+     * Replace named parameters ({@code :paramName}) with their actual values
+     * for logging purposes. Strings and timestamps are quoted; nulls become {@code NULL}.
+     */
+    private static String resolveParams(String sql, MapSqlParameterSource params) {
+        String resolved = sql;
+        // Sort by key length DESC so longer params are replaced first
+        // (e.g. :operatorId before :operator)
+        java.util.Map<String, Object> values = params.getValues();
+        java.util.List<String> keys = new java.util.ArrayList<>(values.keySet());
+        keys.sort((a, b) -> b.length() - a.length());
+
+        for (String key : keys) {
+            Object val = values.get(key);
+            String replacement = formatValue(val);
+            resolved = resolved.replace(":" + key, replacement);
+        }
+        return resolved;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String formatValue(Object val) {
+        if (val == null) return "NULL";
+        if (val instanceof String s) return "'" + s.replace("'", "\\'") + "'";
+        if (val instanceof java.time.Instant t) return "'" + t.toString() + "'";
+        if (val instanceof java.time.LocalDate d) return "'" + d.toString() + "'";
+        if (val instanceof java.time.LocalDateTime dt) return "'" + dt.toString() + "'";
+        if (val instanceof java.sql.Timestamp ts) return "'" + ts.toInstant().toString() + "'";
+        if (val instanceof Enum<?> e) return "'" + e.name() + "'";
+        if (val instanceof java.util.Collection<?> col) {
+            java.util.StringJoiner sj = new java.util.StringJoiner(", ");
+            for (Object item : col) sj.add(formatValue(item));
+            return sj.toString();
+        }
+        return val.toString();
     }
 
     // ── Utilities ────────────────────────────────────────────────────────

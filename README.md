@@ -199,11 +199,11 @@ List<UserSummary> history = ClickHouseQuery
 
 
 // ══════════════════════════════════════════════════════════════════
-// 5. SUBQUERY FROM — derived table
+// 5. SUBQUERY FROM + WINDOW FUNCTION — derived table with ranking
 // ══════════════════════════════════════════════════════════════════
 List<UserRankRow> ranked = ClickHouseQuery
     .select(sub.col("user_id"), sub.col("total"),
-            "rank() OVER (ORDER BY total DESC) AS rank")
+            rank().over().orderBy("total", SortOrder.DESC).as("rank"))
     .from(
         ClickHouseQuery.select("user_id", sum("revenue").as("total"))
             .from("order_items").where("tenant_id").eq(tenantId)
@@ -214,6 +214,34 @@ List<UserRankRow> ranked = ClickHouseQuery
     .orderBy("rank", SortOrder.ASC)
     .limit(50)
     .query(namedJdbc, UserRankRow.class);
+
+
+// ══════════════════════════════════════════════════════════════════
+// 5b. WINDOW FUNCTIONS — running totals, ranking, lag/lead
+// ══════════════════════════════════════════════════════════════════
+List<RunningReport> running = ClickHouseQuery
+    .select(
+        col("user_id"),
+        col("amount"),
+        sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total"),
+        rowNumber().over().partitionBy("game_id").orderBy("amount", SortOrder.DESC).as("rank"),
+        lag("amount").over().partitionBy("user_id").orderBy("created_at").as("prev_amount")
+    )
+    .from("order_items")
+    .where("tenant_id").eq(tenantId)
+    .query(namedJdbc, RunningReport.class);
+
+
+// ══════════════════════════════════════════════════════════════════
+// 5c. GROUP BY WITH TOTALS — ClickHouse-specific summary row
+// ══════════════════════════════════════════════════════════════════
+List<GameSummary> summaries = ClickHouseQuery
+    .select("game_id", sum("amount").as("total"), count().as("cnt"))
+    .from("order_items")
+    .where("tenant_id").eq(tenantId)
+    .groupByWithTotals("game_id")
+    .query(namedJdbc, GameSummary.class);
+// → Last row contains totals across ALL groups
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -265,7 +293,7 @@ ClickHouseInsert.into("order_items")
     );
 ```
 
-> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER / LEFT / RIGHT / FULL OUTER), every WHERE operator (eq / ne / gt / gte / lt / lte / in / notIn / isNull / isNotNull / between Instant / between Number / eqIfNotBlank / eqIf / in(subquery) / notIn(subquery) / whereRaw / whereILike / whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators, thenRaw, orElseRaw, end), all 5 aggregates + 5 conditional aggregates (fluent & raw), arithmetic chain (minus / plus / multiply / divide), multi-column `countDistinct`, HAVING + `havingRaw`, multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage` / `queryOne` / terminal `.count()` / subquery count, INSERT batch (`set` / `setOrDefault` / `setEnum` / `setTimestamp` / `setArray`).
+> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER / LEFT / RIGHT / FULL OUTER), every WHERE operator (eq / ne / gt / gte / lt / lte / in / notIn / isNull / isNotNull / between Instant / between Number / eqIfNotBlank / eqIf / in(subquery) / notIn(subquery) / whereRaw / whereILike / whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators, thenRaw, orElseRaw, end), all 5 aggregates + 5 conditional aggregates (fluent & raw), **Window Functions** (`rowNumber`, `rank`, `denseRank`, `lag`, `lead`, `firstValue`, `lastValue`, `ntile` + `OVER(PARTITION BY...ORDER BY...)`), arithmetic chain (minus / plus / multiply / divide), multi-column `countDistinct`, HAVING + `havingRaw`, **GROUP BY modifiers** (`WITH TOTALS`, `WITH ROLLUP`, `WITH CUBE`), multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage` / `queryOne` / terminal `.count()` / subquery count, INSERT batch (`set` / `setOrDefault` / `setEnum` / `setTimestamp` / `setArray`).
 
 ---
 
@@ -294,6 +322,8 @@ ClickHouseInsert.into("order_items")
 | 19 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
 | 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.col("amount")` |
 | 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
+| 22 | **Window Functions** | `CH.rowNumber().over().partitionBy("col").orderBy("col").as("rank")` |
+| 23 | **GROUP BY modifiers** | `.groupByWithTotals()` / `.groupByWithRollup()` / `.groupByWithCube()` |
 
 ---
 
@@ -874,7 +904,105 @@ ClickHouseQuery.select("*").from("orders")
 
 > **Note:** `UNION ALL` queries are excluded. Default value: `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
 
-### 20. INSERT
+### 20. Window Functions
+
+Fluent window expressions with `OVER(PARTITION BY ... ORDER BY ...)`:
+
+```java
+import static lib.core.clickhouse.expression.CH.*;
+
+Alias o = Alias.of("orders").as("o");
+
+// row_number() with PARTITION BY + ORDER BY
+ClickHouseQuery.select(
+        o.col("user_id"),
+        o.col("amount"),
+        rowNumber().over()
+            .partitionBy("game_id")
+            .orderBy("amount", SortOrder.DESC)
+            .as("rank"),
+        sum("amount").over()
+            .partitionBy("user_id")
+            .orderBy("created_at")
+            .as("running_total"),
+        lag("amount").over()
+            .partitionBy("user_id")
+            .orderBy("created_at")
+            .as("prev_amount")
+    )
+    .from(o)
+    .query(namedJdbc, RankReport.class);
+```
+
+**Available window functions:**
+
+| Method | SQL |
+|---|---|
+| `CH.rowNumber()` | `row_number()` |
+| `CH.rank()` | `rank()` |
+| `CH.denseRank()` | `dense_rank()` |
+| `CH.lag("col")` / `CH.lag("col", offset)` | `lag(col, 1)` / `lag(col, N)` |
+| `CH.lead("col")` / `CH.lead("col", offset)` | `lead(col, 1)` / `lead(col, N)` |
+| `CH.firstValue("col")` | `first_value(col)` |
+| `CH.lastValue("col")` | `last_value(col)` |
+| `CH.ntile(n)` | `ntile(n)` |
+
+**Any aggregate can also be used as window function:**
+
+```java
+// Running sum per user
+CH.sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total")
+
+// Partition-only (no ORDER BY)
+CH.sum("amount").over().partitionBy("game_id").as("game_total")
+
+// Multiple ORDER BY columns
+CH.rowNumber().over()
+    .partitionBy("game_id")
+    .orderBy("amount", SortOrder.DESC)
+    .orderBy("created_at", SortOrder.ASC)
+    .as("rank")
+
+// Alias-aware
+o.sum("amount").over().partitionBy(o.col("game_id")).orderBy(o.col("created_at")).as("running")
+```
+
+### 21. GROUP BY Modifiers (ClickHouse-specific)
+
+ClickHouse supports special GROUP BY modifiers for multi-level aggregation:
+
+```java
+// WITH TOTALS — adds an extra summary row with totals across all groups
+ClickHouseQuery.select("game_id", sum("amount").as("total"))
+    .from("orders")
+    .groupByWithTotals("game_id")
+    .query(namedJdbc, Report.class);
+// → GROUP BY game_id WITH TOTALS
+
+// WITH ROLLUP — hierarchical subtotals from right to left
+ClickHouseQuery.select("operator_id", "game_id", sum("amount").as("total"))
+    .from("orders")
+    .groupByWithRollup("operator_id", "game_id")
+    .query(namedJdbc, Report.class);
+// → GROUP BY operator_id, game_id WITH ROLLUP
+
+// WITH CUBE — subtotals for all combinations of dimensions
+ClickHouseQuery.select("operator_id", "game_id", sum("amount").as("total"))
+    .from("orders")
+    .groupByWithCube("operator_id", "game_id")
+    .query(namedJdbc, Report.class);
+// → GROUP BY operator_id, game_id WITH CUBE
+```
+
+> [!TIP]
+> **WITH TOTALS** is the most commonly used — ideal for session/game summary reports.
+> Combine with HAVING for filtered totals:
+> ```java
+> .groupByWithTotals("game_id")
+> .having(sum("amount")).gt(1000)
+> ```
+
+### 22. INSERT
 
 ```java
 ClickHouseInsert.into("orders")
@@ -948,6 +1076,18 @@ ClickHouseQuery.select("user_id")
 | `avgIfRaw("col", "cond")` | `avgIf(col, cond)` — **raw** |
 | `in("col", "v1", "v2")` | `col IN ('v1','v2')` |
 | `.as("alias")` | `... AS alias` |
+| **Window Functions** | |
+| `rowNumber()` | `row_number()` |
+| `rank()` | `rank()` |
+| `denseRank()` | `dense_rank()` |
+| `lag("col")` / `lag("col", n)` | `lag(col, 1)` / `lag(col, n)` |
+| `lead("col")` / `lead("col", n)` | `lead(col, 1)` / `lead(col, n)` |
+| `firstValue("col")` | `first_value(col)` |
+| `lastValue("col")` | `last_value(col)` |
+| `ntile(n)` | `ntile(n)` |
+| `.over()` | Start `OVER(...)` window spec |
+| `.over().partitionBy("col")` | `OVER(PARTITION BY col ...)` |
+| `.over().orderBy("col", DIR)` | `OVER(... ORDER BY col DIR)` |
 
 ### CASE WHEN Operators
 
@@ -988,6 +1128,9 @@ ClickHouseQuery.select("user_id")
 | | `.whereOr(or -> or.where(...).eq(...))` | Fluent OR group |
 | | `.whereRaw("condition")` | Raw WHERE |
 | **GROUP BY** | `.groupBy("col1", "col2")` | Group by columns |
+| | `.groupByWithTotals("col1", "col2")` | GROUP BY ... WITH TOTALS |
+| | `.groupByWithRollup("col1", "col2")` | GROUP BY ... WITH ROLLUP |
+| | `.groupByWithCube("col1", "col2")` | GROUP BY ... WITH CUBE |
 | **HAVING** | `.having(sum("col")).gt(100)` | Aggregate filter |
 | **ORDER BY** | `.orderBy("col", SortOrder.DESC)` | Sort (multiple calls OK) |
 | **LIMIT** | `.limit(10).offset(0)` | Pagination |

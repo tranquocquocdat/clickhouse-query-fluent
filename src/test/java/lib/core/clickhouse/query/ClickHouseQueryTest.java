@@ -2110,4 +2110,251 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("status = :_or0"));
         }
     }
+
+    // ── Window Functions ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Window Functions")
+    class WindowFunctionTests {
+
+        @Test
+        @DisplayName("row_number() OVER(ORDER BY col)")
+        void rowNumberOverOrderBy() {
+            String sql = ClickHouseQuery
+                    .select("user_id",
+                            CH.rowNumber().over().orderBy("created_at", SortOrder.DESC).as("rank"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("row_number() OVER(ORDER BY created_at DESC) AS rank"));
+        }
+
+        @Test
+        @DisplayName("sum() OVER(PARTITION BY col ORDER BY col)")
+        void sumOverPartitionByOrderBy() {
+            String sql = ClickHouseQuery
+                    .select("user_id", "amount",
+                            CH.sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("sum(amount) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS running_total"));
+        }
+
+        @Test
+        @DisplayName("OVER with PARTITION BY only (no ORDER BY)")
+        void partitionByOnly() {
+            String sql = ClickHouseQuery
+                    .select("user_id",
+                            CH.sum("amount").over().partitionBy("game_id").as("game_total"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("sum(amount) OVER(PARTITION BY game_id) AS game_total"));
+        }
+
+        @Test
+        @DisplayName("OVER with ORDER BY only (no PARTITION BY)")
+        void orderByOnly() {
+            String sql = ClickHouseQuery
+                    .select(CH.rank().over().orderBy("score", SortOrder.DESC).as("rank"))
+                    .from("players")
+                    .toSql();
+
+            assertTrue(sql.contains("rank() OVER(ORDER BY score DESC) AS rank"));
+        }
+
+        @Test
+        @DisplayName("Multiple window functions in SELECT")
+        void multipleWindows() {
+            String sql = ClickHouseQuery
+                    .select("user_id",
+                            CH.rowNumber().over().partitionBy("game_id").orderBy("amount", SortOrder.DESC).as("rank"),
+                            CH.sum("amount").over().partitionBy("game_id").as("game_total"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("row_number() OVER(PARTITION BY game_id ORDER BY amount DESC) AS rank"));
+            assertTrue(sql.contains("sum(amount) OVER(PARTITION BY game_id) AS game_total"));
+        }
+
+        @Test
+        @DisplayName("Alias-aware window function")
+        void aliasAwareWindow() {
+            Alias o = Alias.of("orders").as("o");
+            String sql = ClickHouseQuery
+                    .select(o.col("user_id"),
+                            o.sum("amount").over().partitionBy(o.col("game_id")).orderBy(o.col("created_at")).as("running"))
+                    .from(o)
+                    .toSql();
+
+            assertTrue(sql.contains("sum(o.amount) OVER(PARTITION BY o.game_id ORDER BY o.created_at ASC) AS running"));
+        }
+
+        @Test
+        @DisplayName("Multiple PARTITION BY columns")
+        void multiplePartitionBy() {
+            String sql = ClickHouseQuery
+                    .select(CH.sum("amount").over().partitionBy("game_id", "operator_id").orderBy("created_at").as("total"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("PARTITION BY game_id, operator_id"));
+        }
+
+        @Test
+        @DisplayName("Multiple ORDER BY in window")
+        void multipleOrderBy() {
+            String sql = ClickHouseQuery
+                    .select(CH.rowNumber().over()
+                            .partitionBy("game_id")
+                            .orderBy("amount", SortOrder.DESC)
+                            .orderBy("created_at", SortOrder.ASC)
+                            .as("rank"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("ORDER BY amount DESC, created_at ASC"));
+        }
+
+        @Test
+        @DisplayName("dense_rank() window function")
+        void denseRank() {
+            String sql = ClickHouseQuery
+                    .select(CH.denseRank().over().orderBy("score", SortOrder.DESC).as("dense_rank"))
+                    .from("players")
+                    .toSql();
+
+            assertTrue(sql.contains("dense_rank() OVER(ORDER BY score DESC) AS dense_rank"));
+        }
+
+        @Test
+        @DisplayName("lag() / lead() window functions")
+        void lagLead() {
+            String sql = ClickHouseQuery
+                    .select("amount",
+                            CH.lag("amount").over().orderBy("created_at").as("prev_amount"),
+                            CH.lead("amount", 2).over().orderBy("created_at").as("next_2_amount"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("lag(amount, 1) OVER(ORDER BY created_at ASC) AS prev_amount"));
+            assertTrue(sql.contains("lead(amount, 2) OVER(ORDER BY created_at ASC) AS next_2_amount"));
+        }
+
+        @Test
+        @DisplayName("first_value() / last_value() window functions")
+        void firstLastValue() {
+            String sql = ClickHouseQuery
+                    .select(CH.firstValue("amount").over().partitionBy("user_id").orderBy("created_at").as("first_bet"),
+                            CH.lastValue("amount").over().partitionBy("user_id").orderBy("created_at").as("last_bet"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("first_value(amount) OVER("));
+            assertTrue(sql.contains("last_value(amount) OVER("));
+        }
+
+        @Test
+        @DisplayName("ntile() window function")
+        void ntile() {
+            String sql = ClickHouseQuery
+                    .select(CH.ntile(4).over().partitionBy("game_id").orderBy("amount", SortOrder.DESC).as("quartile"))
+                    .from("orders")
+                    .toSql();
+
+            assertTrue(sql.contains("ntile(4) OVER(PARTITION BY game_id ORDER BY amount DESC) AS quartile"));
+        }
+
+        @Test
+        @DisplayName("WindowBuilder.build() returns Expr")
+        void buildReturnsExpr() {
+            CH.Expr expr = CH.rowNumber().over().partitionBy("game_id").orderBy("amount").build();
+            assertEquals("row_number() OVER(PARTITION BY game_id ORDER BY amount ASC)", expr.toString());
+        }
+    }
+
+    // ── GROUP BY Modifiers ──────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GROUP BY Modifiers")
+    class GroupByModifierTests {
+
+        @Test
+        @DisplayName("GROUP BY WITH TOTALS")
+        void groupByWithTotals() {
+            String sql = ClickHouseQuery
+                    .select("game_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithTotals("game_id")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY game_id WITH TOTALS"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH ROLLUP")
+        void groupByWithRollup() {
+            String sql = ClickHouseQuery
+                    .select("operator_id", "game_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithRollup("operator_id", "game_id")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY operator_id, game_id WITH ROLLUP"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH CUBE")
+        void groupByWithCube() {
+            String sql = ClickHouseQuery
+                    .select("operator_id", "game_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithCube("operator_id", "game_id")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY operator_id, game_id WITH CUBE"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH TOTALS + HAVING still works")
+        void groupByWithTotalsAndHaving() {
+            String sql = ClickHouseQuery
+                    .select("game_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithTotals("game_id")
+                    .having(CH.sum("amount")).gt(1000)
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY game_id WITH TOTALS"));
+            assertTrue(sql.contains("HAVING sum(amount) >"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH TOTALS using Expr overload")
+        void groupByWithTotalsExpr() {
+            Alias o = Alias.of("orders").as("o");
+            String sql = ClickHouseQuery
+                    .select(o.col("game_id"), o.sum("amount").as("total"))
+                    .from(o)
+                    .groupByWithTotals(o.col("game_id"))
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY o.game_id WITH TOTALS"));
+        }
+
+        @Test
+        @DisplayName("Regular GROUP BY does NOT have modifier")
+        void regularGroupByNoModifier() {
+            String sql = ClickHouseQuery
+                    .select("game_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupBy("game_id")
+                    .toSql();
+
+            assertFalse(sql.contains("WITH TOTALS"));
+            assertFalse(sql.contains("WITH ROLLUP"));
+            assertFalse(sql.contains("WITH CUBE"));
+        }
+    }
 }
