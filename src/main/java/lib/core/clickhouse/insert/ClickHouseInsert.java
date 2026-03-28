@@ -1,5 +1,6 @@
 package lib.core.clickhouse.insert;
 
+import lib.core.clickhouse.util.CHStringUtils;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
@@ -96,18 +97,6 @@ public final class ClickHouseInsert {
      * Example: "user_id" → "userId", "created_at" → "createdAt"
      */
     static String toCamelCase(String snakeCase) {
-        StringBuilder result = new StringBuilder();
-        boolean nextUpper = false;
-        for (char c : snakeCase.toCharArray()) {
-            if (c == '_') {
-                nextUpper = true;
-            } else if (nextUpper) {
-                result.append(Character.toUpperCase(c));
-                nextUpper = false;
-            } else {
-                result.append(c);
-            }
-        }
-        return result.toString();
+        return CHStringUtils.toCamelCase(snakeCase);
     }
 }

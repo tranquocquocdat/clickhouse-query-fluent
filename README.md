@@ -303,7 +303,7 @@ ClickHouseInsert.into("order_items")
 
 ```bash
 ./gradlew clean jar
-# → build/libs/clickhouse-query-builder-1.0.0.jar
+# → build/libs/clickhouse-query-builder-1.1.0.jar
 ```
 
 Copy JAR to your project's `app/libs/` folder:
@@ -314,7 +314,7 @@ repositories {
     flatDir { dirs 'libs' }
 }
 dependencies {
-    implementation name: 'clickhouse-query-builder-1.0.0'
+    implementation name: 'clickhouse-query-builder-1.1.0'
 }
 ```
 
@@ -326,7 +326,7 @@ dependencies {
 
 ```groovy
 repositories { mavenLocal() }
-dependencies { implementation 'lib.core:clickhouse-query-builder:1.0.0' }
+dependencies { implementation 'lib.core:clickhouse-query-builder:1.1.0' }
 ```
 
 **Requirements:** Java 21+ · Spring JDBC 6.x
@@ -874,7 +874,150 @@ ClickHouseQuery.select("*").from("orders")
 
 > **Note:** `UNION ALL` queries are excluded. Default value: `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
 
-### 20. INSERT
+### 20. Window Functions
+
+Window functions perform calculations across rows related to the current row within a partition.
+
+**Basic window functions:**
+
+```java
+import static lib.core.clickhouse.expression.CH.*;
+
+ClickHouseQuery.select(
+    col("user_id"),
+    col("order_id"),
+    col("amount"),
+    // Row number within partition
+    rowNumber().over().partitionBy("user_id").orderBy("created_at").as("row_num"),
+    
+    // Rank with gaps for ties
+    rank().over().partitionBy("user_id").orderBy("amount", SortOrder.DESC).as("rank"),
+    
+    // Dense rank without gaps
+    denseRank().over().partitionBy("user_id").orderBy("amount", SortOrder.DESC).as("dense_rank"),
+    
+    // Running total per user
+    sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total"),
+    
+    // Previous row value
+    lag("amount").over().partitionBy("user_id").orderBy("created_at").as("prev_amount"),
+    
+    // Next row value
+    lead("amount").over().partitionBy("user_id").orderBy("created_at").as("next_amount"),
+    
+    // First value in partition
+    firstValue("amount").over().partitionBy("user_id").orderBy("created_at").as("first_order"),
+    
+    // Last value in partition
+    lastValue("amount").over().partitionBy("user_id").orderBy("created_at").as("last_order"),
+    
+    // Divide into N buckets
+    ntile(4).over().partitionBy("user_id").orderBy("amount", SortOrder.DESC).as("quartile")
+)
+.from("orders")
+.where("tenant_id").eq(tenantId)
+.query(namedJdbc, OrderWithRank.class);
+```
+
+**Window function without partition (whole result set):**
+
+```java
+// Global ranking across all rows
+ClickHouseQuery.select(
+    col("user_id"),
+    col("amount"),
+    rowNumber().over().orderBy("amount", SortOrder.DESC).as("global_rank")
+)
+.from("orders")
+.query(namedJdbc, Report.class);
+```
+
+**With type-safe Alias:**
+
+```java
+Alias o = Alias.of("orders").as("o");
+
+ClickHouseQuery.select(
+    o.col("user_id"),
+    o.col("amount"),
+    rowNumber().over()
+        .partitionBy(o.col("user_id"))
+        .orderBy(o.col("created_at"), SortOrder.DESC)
+        .as("rank")
+)
+.from(o)
+.where(o.col("tenant_id")).eq(tenantId)
+.query(namedJdbc, Report.class);
+```
+
+**Available window functions:**
+
+| Function | Description | Example |
+|---|---|---|
+| `rowNumber()` | Sequential number within partition | `rowNumber().over().partitionBy("user_id").orderBy("created_at")` |
+| `rank()` | Rank with gaps for ties | `rank().over().orderBy("score", SortOrder.DESC)` |
+| `denseRank()` | Rank without gaps | `denseRank().over().orderBy("score", SortOrder.DESC)` |
+| `lag(col)` | Previous row value (offset 1) | `lag("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `lag(col, n)` | Value N rows before | `lag("amount", 3).over().orderBy("created_at")` |
+| `lead(col)` | Next row value (offset 1) | `lead("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `lead(col, n)` | Value N rows after | `lead("amount", 2).over().orderBy("created_at")` |
+| `firstValue(col)` | First value in window frame | `firstValue("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `lastValue(col)` | Last value in window frame | `lastValue("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `ntile(n)` | Divide into N buckets | `ntile(4).over().orderBy("amount")` — quartiles |
+| `sum(col).over()` | Running sum | `sum("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `avg(col).over()` | Running average | `avg("amount").over().partitionBy("user_id").orderBy("created_at")` |
+| `count().over()` | Running count | `count().over().partitionBy("user_id").orderBy("created_at")` |
+
+### 21. GROUP BY Modifiers
+
+ClickHouse supports special GROUP BY modifiers for advanced aggregation.
+
+**WITH TOTALS — adds a summary row:**
+
+```java
+ClickHouseQuery.select(
+    col("product_id"),
+    sum("amount").as("total")
+)
+.from("orders")
+.where("tenant_id").eq(tenantId)
+.groupByWithTotals("product_id")
+.query(namedJdbc, Report.class);
+// → GROUP BY product_id WITH TOTALS
+// Returns: regular rows + one extra row with totals across all groups
+```
+
+**WITH ROLLUP — hierarchical subtotals:**
+
+```java
+ClickHouseQuery.select(
+    col("year"),
+    col("month"),
+    sum("amount").as("total")
+)
+.from("orders")
+.groupByWithRollup("year", "month")
+.query(namedJdbc, Report.class);
+// → GROUP BY year, month WITH ROLLUP
+// Returns: (year, month), (year, NULL), (NULL, NULL) — hierarchical subtotals
+```
+
+**WITH CUBE — all combinations:**
+
+```java
+ClickHouseQuery.select(
+    col("region"),
+    col("product"),
+    sum("amount").as("total")
+)
+.from("orders")
+.groupByWithCube("region", "product")
+.query(namedJdbc, Report.class);
+// → GROUP BY region, product WITH CUBE
+// Returns: (region, product), (region, NULL), (NULL, product), (NULL, NULL)
+```
+
+### 22. INSERT
 
 ```java
 ClickHouseInsert.into("orders")
@@ -926,6 +1069,7 @@ ClickHouseQuery.select("user_id")
 |---|---|
 | `col("name")` | `name` |
 | `col("name", "alias")` | `name AS alias` |
+| `raw("expr")` | `expr` — raw SQL expression |
 | `count()` | `count(*)` |
 | `count("col")` | `count(col)` |
 | `countDistinct("col")` | `countDistinct(col)` |
@@ -934,8 +1078,11 @@ ClickHouseQuery.select("user_id")
 | `min("col")` | `min(col)` |
 | `max("col")` | `max(col)` |
 | `avg("col")` | `avg(col)` |
+| `any("col")` | `any(col)` — arbitrary value |
 | `.minus(expr)` | `expr1 - expr2` — **arithmetic** |
 | `.plus(expr)` | `expr1 + expr2` — **arithmetic** |
+| `.multiply(expr)` | `expr1 * expr2` — **arithmetic** |
+| `.divide(expr)` | `expr1 / expr2` — **arithmetic** |
 | `sumIf("col").where("c").eq(v)` | `sumIf(col, c = 'v')` — **fluent** |
 | `countIf("col").where("c").in(...)` | `countIf(col, c IN (...))` — **fluent** |
 | `minIf("col").where("c").gt(v)` | `minIf(col, c > v)` — **fluent** |
@@ -946,6 +1093,15 @@ ClickHouseQuery.select("user_id")
 | `minIfRaw("col", "cond")` | `minIf(col, cond)` — **raw** |
 | `maxIfRaw("col", "cond")` | `maxIf(col, cond)` — **raw** |
 | `avgIfRaw("col", "cond")` | `avgIf(col, cond)` — **raw** |
+| `rowNumber()` | `row_number()` — **window function** |
+| `rank()` | `rank()` — **window function** |
+| `denseRank()` | `dense_rank()` — **window function** |
+| `lag("col")` / `lag("col", n)` | `lag(col, 1)` / `lag(col, n)` — **window function** |
+| `lead("col")` / `lead("col", n)` | `lead(col, 1)` / `lead(col, n)` — **window function** |
+| `firstValue("col")` | `first_value(col)` — **window function** |
+| `lastValue("col")` | `last_value(col)` — **window function** |
+| `ntile(n)` | `ntile(n)` — **window function** |
+| `.over().partitionBy(...).orderBy(...)` | `OVER(PARTITION BY ... ORDER BY ...)` — **window** |
 | `in("col", "v1", "v2")` | `col IN ('v1','v2')` |
 | `.as("alias")` | `... AS alias` |
 
@@ -988,6 +1144,9 @@ ClickHouseQuery.select("user_id")
 | | `.whereOr(or -> or.where(...).eq(...))` | Fluent OR group |
 | | `.whereRaw("condition")` | Raw WHERE |
 | **GROUP BY** | `.groupBy("col1", "col2")` | Group by columns |
+| | `.groupByWithTotals("col1", "col2")` | GROUP BY ... WITH TOTALS |
+| | `.groupByWithRollup("col1", "col2")` | GROUP BY ... WITH ROLLUP |
+| | `.groupByWithCube("col1", "col2")` | GROUP BY ... WITH CUBE |
 | **HAVING** | `.having(sum("col")).gt(100)` | Aggregate filter |
 | **ORDER BY** | `.orderBy("col", SortOrder.DESC)` | Sort (multiple calls OK) |
 | **LIMIT** | `.limit(10).offset(0)` | Pagination |

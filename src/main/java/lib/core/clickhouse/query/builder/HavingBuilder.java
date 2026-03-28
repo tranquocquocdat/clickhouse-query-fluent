@@ -9,7 +9,7 @@ import lib.core.clickhouse.query.ClickHouseQuery;
 public final class HavingBuilder {
     private final ClickHouseQuery query;
     private final String expression;
-    private static int paramSeq = 0;
+    private int paramSeq = 0;
 
     public HavingBuilder(ClickHouseQuery query, String expression) {
         this.query = query;

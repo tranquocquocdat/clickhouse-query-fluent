@@ -654,6 +654,55 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("AND d <= :"));
             assertTrue(sql.contains("AND e >= :") && sql.contains("AND e <= :"));
         }
+
+        @Test
+        @DisplayName("GROUP BY WITH TOTALS generates correct SQL")
+        void groupByWithTotals() {
+            String sql = ClickHouseQuery
+                    .select("product_id", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithTotals("product_id")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY product_id WITH TOTALS"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH ROLLUP generates correct SQL")
+        void groupByWithRollup() {
+            String sql = ClickHouseQuery
+                    .select("year", "month", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithRollup("year", "month")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY year, month WITH ROLLUP"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH CUBE generates correct SQL")
+        void groupByWithCube() {
+            String sql = ClickHouseQuery
+                    .select("region", "product", "sum(amount) AS total")
+                    .from("orders")
+                    .groupByWithCube("region", "product")
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY region, product WITH CUBE"));
+        }
+
+        @Test
+        @DisplayName("GROUP BY WITH TOTALS with Expr overload")
+        void groupByWithTotals_expr() {
+            Alias o = Alias.of("orders").as("o");
+            String sql = ClickHouseQuery
+                    .select(o.col("product_id"), o.sum("amount").as("total"))
+                    .from(o)
+                    .groupByWithTotals(o.col("product_id"))
+                    .toSql();
+
+            assertTrue(sql.contains("GROUP BY o.product_id WITH TOTALS"));
+        }
     }
 
     // ── Execute Tests ───────────────────────────────────────────────────

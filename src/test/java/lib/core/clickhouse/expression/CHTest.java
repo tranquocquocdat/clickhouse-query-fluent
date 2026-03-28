@@ -362,3 +362,197 @@ class CHTest {
         assertTrue(sql.contains("avgIf(score, status = 'DONE') AS avg_score"));
     }
 }
+
+    // ── Window Functions ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("rowNumber().over().partitionBy().orderBy() generates window function")
+    void windowFunction_rowNumber() {
+        var result = CH.rowNumber().over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("row_num");
+
+        assertEquals("row_number() OVER(PARTITION BY user_id ORDER BY created_at ASC) AS row_num",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("rank().over().orderBy() without partition")
+    void windowFunction_rank_noPartition() {
+        var result = CH.rank().over()
+                .orderBy("amount", lib.core.clickhouse.query.SortOrder.DESC)
+                .as("rank");
+
+        assertEquals("rank() OVER(ORDER BY amount DESC) AS rank", result.toString());
+    }
+
+    @Test
+    @DisplayName("denseRank().over() generates dense_rank window function")
+    void windowFunction_denseRank() {
+        var result = CH.denseRank().over()
+                .partitionBy("game_id")
+                .orderBy("score", lib.core.clickhouse.query.SortOrder.DESC)
+                .as("dense_rank");
+
+        assertEquals("dense_rank() OVER(PARTITION BY game_id ORDER BY score DESC) AS dense_rank",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("lag(column) generates lag window function with offset 1")
+    void windowFunction_lag() {
+        var result = CH.lag("amount").over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("prev_amount");
+
+        assertEquals("lag(amount, 1) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS prev_amount",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("lag(column, offset) generates lag with custom offset")
+    void windowFunction_lag_customOffset() {
+        var result = CH.lag("amount", 3).over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("prev_3_amount");
+
+        assertEquals("lag(amount, 3) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS prev_3_amount",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("lead(column) generates lead window function")
+    void windowFunction_lead() {
+        var result = CH.lead("amount").over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("next_amount");
+
+        assertEquals("lead(amount, 1) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS next_amount",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("lead(column, offset) generates lead with custom offset")
+    void windowFunction_lead_customOffset() {
+        var result = CH.lead("amount", 2).over()
+                .orderBy("created_at")
+                .as("next_2_amount");
+
+        assertEquals("lead(amount, 2) OVER(ORDER BY created_at ASC) AS next_2_amount",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("firstValue(column) generates first_value window function")
+    void windowFunction_firstValue() {
+        var result = CH.firstValue("amount").over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("first_order");
+
+        assertEquals("first_value(amount) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS first_order",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("lastValue(column) generates last_value window function")
+    void windowFunction_lastValue() {
+        var result = CH.lastValue("amount").over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("last_order");
+
+        assertEquals("last_value(amount) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS last_order",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("ntile(n) generates ntile window function")
+    void windowFunction_ntile() {
+        var result = CH.ntile(4).over()
+                .orderBy("amount", lib.core.clickhouse.query.SortOrder.DESC)
+                .as("quartile");
+
+        assertEquals("ntile(4) OVER(ORDER BY amount DESC) AS quartile", result.toString());
+    }
+
+    @Test
+    @DisplayName("sum().over() generates running sum window function")
+    void windowFunction_sum() {
+        var result = CH.sum("amount").over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("running_total");
+
+        assertEquals("sum(amount) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS running_total",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("avg().over() generates running average window function")
+    void windowFunction_avg() {
+        var result = CH.avg("score").over()
+                .partitionBy("game_id")
+                .orderBy("round_id")
+                .as("running_avg");
+
+        assertEquals("avg(score) OVER(PARTITION BY game_id ORDER BY round_id ASC) AS running_avg",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("count().over() generates running count window function")
+    void windowFunction_count() {
+        var result = CH.count().over()
+                .partitionBy("user_id")
+                .orderBy("created_at")
+                .as("running_count");
+
+        assertEquals("count(*) OVER(PARTITION BY user_id ORDER BY created_at ASC) AS running_count",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("Window function with multiple partition columns")
+    void windowFunction_multiplePartitions() {
+        var result = CH.rowNumber().over()
+                .partitionBy("user_id", "game_id")
+                .orderBy("created_at")
+                .as("row_num");
+
+        assertEquals("row_number() OVER(PARTITION BY user_id, game_id ORDER BY created_at ASC) AS row_num",
+                result.toString());
+    }
+
+    @Test
+    @DisplayName("Window function in ClickHouseQuery.select()")
+    void windowFunction_inQuery() {
+        String sql = ClickHouseQuery.select(
+                CH.col("user_id"),
+                CH.col("amount"),
+                CH.rowNumber().over()
+                        .partitionBy("user_id")
+                        .orderBy("created_at", lib.core.clickhouse.query.SortOrder.DESC)
+                        .as("rank")
+        ).from("orders").toSql();
+
+        assertTrue(sql.contains("row_number() OVER(PARTITION BY user_id ORDER BY created_at DESC) AS rank"));
+    }
+
+    @Test
+    @DisplayName("raw() wraps raw SQL expression")
+    void raw() {
+        assertEquals("toYYYYMM(created_at)", CH.raw("toYYYYMM(created_at)").toString());
+    }
+
+    @Test
+    @DisplayName("raw().as() adds alias to raw expression")
+    void raw_withAlias() {
+        assertEquals("toYYYYMM(created_at) AS month",
+                CH.raw("toYYYYMM(created_at)").as("month").toString());
+    }
+}

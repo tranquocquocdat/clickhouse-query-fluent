@@ -3,6 +3,7 @@ package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.CH;
 import lib.core.clickhouse.query.builder.*;
+import lib.core.clickhouse.util.CHStringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
@@ -90,27 +91,27 @@ public final class ClickHouseQuery {
     public static final int DEFAULT_LIMIT = 1000;
 
     // Public fields — accessed by builder classes in query.builder sub-package
-    public final List<String> selectColumns = new ArrayList<>();
-    public boolean distinct;
-    public String tableName;
-    public final List<String> joinClauses = new ArrayList<>();
-    public final List<String> whereClauses = new ArrayList<>();
-    public final MapSqlParameterSource params = new MapSqlParameterSource();
-    public final List<String> groupByColumns = new ArrayList<>();
-    public final List<String> havingClauses = new ArrayList<>();
-    public final List<String> orderByClauses = new ArrayList<>();
-    public Integer limitVal;
-    public Long offsetVal;
+    final List<String> selectColumns = new ArrayList<>();
+    boolean distinct;
+    String tableName;
+    final List<String> joinClauses = new ArrayList<>();
+    final List<String> whereClauses = new ArrayList<>();
+    final MapSqlParameterSource params = new MapSqlParameterSource();
+    final List<String> groupByColumns = new ArrayList<>();
+    final List<String> havingClauses = new ArrayList<>();
+    final List<String> orderByClauses = new ArrayList<>();
+    Integer limitVal;
+    Long offsetVal;
 
     // Subquery FROM
     private ClickHouseQuery fromSubQuery;
     private String fromSubQueryAlias;
 
     // UNION ALL
-    public final List<ClickHouseQuery> unionQueries = new ArrayList<>();
+    final List<ClickHouseQuery> unionQueries = new ArrayList<>();
 
     // WITH (CTE)
-    public final List<String[]> cteList = new ArrayList<>();
+    final List<String[]> cteList = new ArrayList<>();
 
     private ClickHouseQuery() {}
 
@@ -471,6 +472,8 @@ public final class ClickHouseQuery {
 
     // ── GROUP BY ─────────────────────────────────────────────────────────
 
+    private String groupByModifier;  // WITH TOTALS / WITH ROLLUP / WITH CUBE
+
     /**
      * GROUP BY the given columns.
      *
@@ -491,6 +494,93 @@ public final class ClickHouseQuery {
         String[] strs = new String[columns.length];
         for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
         return groupBy(strs);
+    }
+
+    /**
+     * GROUP BY with TOTALS modifier — adds a summary row with totals.
+     *
+     * <pre>{@code
+     * ClickHouseQuery.select("product_id", sum("amount").as("total"))
+     *     .from("orders")
+     *     .groupByWithTotals("product_id")
+     *     .query(namedJdbc, Report.class);
+     * // → GROUP BY product_id WITH TOTALS
+     * }</pre>
+     *
+     * @param columns columns to group by
+     * @return this query builder
+     */
+    public ClickHouseQuery groupByWithTotals(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH TOTALS";
+        return this;
+    }
+
+    /**
+     * GROUP BY with TOTALS modifier (Expr overload).
+     */
+    public ClickHouseQuery groupByWithTotals(Object... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH TOTALS";
+        return this;
+    }
+
+    /**
+     * GROUP BY with ROLLUP modifier — creates subtotals for hierarchical grouping.
+     *
+     * <pre>{@code
+     * ClickHouseQuery.select("year", "month", sum("amount").as("total"))
+     *     .from("orders")
+     *     .groupByWithRollup("year", "month")
+     *     .query(namedJdbc, Report.class);
+     * // → GROUP BY year, month WITH ROLLUP
+     * }</pre>
+     *
+     * @param columns columns to group by (order matters for hierarchy)
+     * @return this query builder
+     */
+    public ClickHouseQuery groupByWithRollup(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH ROLLUP";
+        return this;
+    }
+
+    /**
+     * GROUP BY with ROLLUP modifier (Expr overload).
+     */
+    public ClickHouseQuery groupByWithRollup(Object... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH ROLLUP";
+        return this;
+    }
+
+    /**
+     * GROUP BY with CUBE modifier — creates subtotals for all combinations.
+     *
+     * <pre>{@code
+     * ClickHouseQuery.select("region", "product", sum("amount").as("total"))
+     *     .from("orders")
+     *     .groupByWithCube("region", "product")
+     *     .query(namedJdbc, Report.class);
+     * // → GROUP BY region, product WITH CUBE
+     * }</pre>
+     *
+     * @param columns columns to group by
+     * @return this query builder
+     */
+    public ClickHouseQuery groupByWithCube(String... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH CUBE";
+        return this;
+    }
+
+    /**
+     * GROUP BY with CUBE modifier (Expr overload).
+     */
+    public ClickHouseQuery groupByWithCube(Object... columns) {
+        groupBy(columns);
+        this.groupByModifier = "WITH CUBE";
+        return this;
     }
 
     // ── HAVING (fluent) ──────────────────────────────────────────────────
@@ -591,6 +681,7 @@ public final class ClickHouseQuery {
     public ClickHouseQuery limit(int limit) {
         advanceTo(Phase.LIMIT);
         this.limitVal = limit;
+        params.addValue("_limit", limit);
         return this;
     }
 
@@ -603,6 +694,7 @@ public final class ClickHouseQuery {
     public ClickHouseQuery offset(long offset) {
         advanceTo(Phase.LIMIT);
         this.offsetVal = offset;
+        params.addValue("_offset", offset);
         return this;
     }
 
@@ -663,6 +755,9 @@ public final class ClickHouseQuery {
         // GROUP BY
         if (!groupByColumns.isEmpty()) {
             sql.append("\nGROUP BY ").append(String.join(", ", groupByColumns));
+            if (groupByModifier != null) {
+                sql.append(" ").append(groupByModifier);
+            }
         }
 
         // HAVING
@@ -688,11 +783,9 @@ public final class ClickHouseQuery {
         // LIMIT / OFFSET
         if (limitVal != null) {
             sql.append("\nLIMIT :_limit");
-            params.addValue("_limit", limitVal);
         }
         if (offsetVal != null) {
             sql.append(" OFFSET :_offset");
-            params.addValue("_offset", offsetVal);
         }
 
         return sql.toString();
@@ -700,8 +793,6 @@ public final class ClickHouseQuery {
 
     /** Get the parameter source for this query. */
     public MapSqlParameterSource toParams() {
-        // Trigger toSql() to ensure limit/offset params are registered
-        toSql();
         return params;
     }
 
@@ -714,7 +805,7 @@ public final class ClickHouseQuery {
      */
     public <T> List<T> query(NamedParameterJdbcTemplate jdbc, RowMapper<T> rowMapper) {
         if (limitVal == null && unionQueries.isEmpty()) {
-            this.limitVal = DEFAULT_LIMIT;
+            limit(DEFAULT_LIMIT);
         }
         String sql = toSql();
         logQuery(sql);
@@ -769,6 +860,9 @@ public final class ClickHouseQuery {
      * @return the mapped DTO, or null if no result
      */
     public <T> T queryOne(NamedParameterJdbcTemplate jdbc, Class<T> type) {
+        if (limitVal == null) {
+            limit(1);  // Optimize: only fetch 1 row
+        }
         List<T> results = query(jdbc, type);
         return results.isEmpty() ? null : results.get(0);
     }
@@ -798,14 +892,22 @@ public final class ClickHouseQuery {
      * @return a {@link Page} containing data + total count
      */
     public <T> Page<T> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, RowMapper<T> rowMapper) {
-        // Inject count(*) OVER() into SELECT columns
-        this.selectColumns.add("count(*) OVER() AS _total");
+        // Clone select columns and inject count(*) OVER() — avoid mutating original list
+        List<String> paginatedColumns = new ArrayList<>(this.selectColumns);
+        paginatedColumns.add("count(*) OVER() AS _total");
 
+        // Build SQL with paginated columns
+        String originalSelectJoin = String.join(",\n       ", this.selectColumns);
+        String paginatedSelectJoin = String.join(",\n       ", paginatedColumns);
+        
         // Apply pagination
-        this.limitVal = pageSize;
-        this.offsetVal = (long) page * pageSize;
+        limit(pageSize);
+        offset((long) page * pageSize);
 
         String sql = toSql();
+        // Replace original SELECT columns with paginated columns
+        sql = sql.replace(originalSelectJoin, paginatedSelectJoin);
+        
         logQuery(sql);
 
         // Track total from first row
@@ -817,9 +919,6 @@ public final class ClickHouseQuery {
             }
             return rowMapper.mapRow(rs, rowNum);
         });
-
-        // Remove the injected _total column so the builder can be reused
-        this.selectColumns.remove(this.selectColumns.size() - 1);
 
         return new Page<>(data, totalHolder[0], page, pageSize);
     }
@@ -934,12 +1033,6 @@ public final class ClickHouseQuery {
 
     /** Convert snake_case to camelCase for parameter naming. */
     public static String toCamelCase(String snake) {
-        String[] parts = snake.split("_");
-        StringBuilder sb = new StringBuilder(parts[0]);
-        for (int i = 1; i < parts.length; i++) {
-            sb.append(Character.toUpperCase(parts[i].charAt(0)));
-            sb.append(parts[i].substring(1));
-        }
-        return sb.toString();
+        return CHStringUtils.toCamelCase(snake);
     }
 }

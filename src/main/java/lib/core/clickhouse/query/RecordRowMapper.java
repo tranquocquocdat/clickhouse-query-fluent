@@ -1,5 +1,6 @@
 package lib.core.clickhouse.query;
 
+import lib.core.clickhouse.util.CHStringUtils;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.lang.reflect.Constructor;
@@ -34,7 +35,7 @@ public final class RecordRowMapper<T extends Record> implements RowMapper<T> {
     private final Constructor<T> constructor;
     private final RecordComponent[] components;
     /** Lazy map: snake_case column alias → record component index */
-    private Map<String, Integer> columnMapping;
+    private volatile Map<String, Integer> columnMapping;
 
     private RecordRowMapper(Class<T> recordType) {
         this.components = recordType.getRecordComponents();
@@ -140,18 +141,6 @@ public final class RecordRowMapper<T extends Record> implements RowMapper<T> {
 
     /** Convert snake_case to camelCase. */
     private static String toCamelCase(String snake) {
-        StringBuilder sb = new StringBuilder();
-        boolean nextUpper = false;
-        for (char c : snake.toCharArray()) {
-            if (c == '_') {
-                nextUpper = true;
-            } else if (nextUpper) {
-                sb.append(Character.toUpperCase(c));
-                nextUpper = false;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
+        return CHStringUtils.toCamelCase(snake);
     }
 }

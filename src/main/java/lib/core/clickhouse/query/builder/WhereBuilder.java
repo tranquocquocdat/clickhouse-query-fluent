@@ -23,7 +23,7 @@ public final class WhereBuilder {
     /** {@code column = :param} — skipped when value is null. */
     public ClickHouseQuery eq(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column);
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
         query.whereClauses.add(column + " = :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -32,7 +32,7 @@ public final class WhereBuilder {
     /** {@code column = :param} — applied only when value is not null and not blank. */
     public ClickHouseQuery eqIfNotBlank(String value) {
         if (value != null && !value.isBlank()) {
-            String paramName = ClickHouseQuery.toCamelCase(column);
+            String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
@@ -42,7 +42,7 @@ public final class WhereBuilder {
     /** {@code column = :param} — applied only when condition is true. */
     public ClickHouseQuery eqIf(boolean condition, Object value) {
         if (condition) {
-            String paramName = ClickHouseQuery.toCamelCase(column);
+            String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
@@ -52,7 +52,7 @@ public final class WhereBuilder {
     /** {@code column != :param} — skipped when value is null. */
     public ClickHouseQuery ne(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column) + "Ne";
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Ne";
         query.whereClauses.add(column + " != :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -61,7 +61,7 @@ public final class WhereBuilder {
     /** {@code column > :param} — skipped when value is null. */
     public ClickHouseQuery gt(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column) + "Gt";
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Gt";
         query.whereClauses.add(column + " > :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -70,7 +70,7 @@ public final class WhereBuilder {
     /** {@code column >= :param} — skipped when value is null. */
     public ClickHouseQuery gte(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column) + "Gte";
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Gte";
         query.whereClauses.add(column + " >= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -79,7 +79,7 @@ public final class WhereBuilder {
     /** {@code column < :param} — skipped when value is null. */
     public ClickHouseQuery lt(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column) + "Lt";
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Lt";
         query.whereClauses.add(column + " < :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -88,7 +88,7 @@ public final class WhereBuilder {
     /** {@code column <= :param} — skipped when value is null. */
     public ClickHouseQuery lte(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(column) + "Lte";
+        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Lte";
         query.whereClauses.add(column + " <= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -99,7 +99,7 @@ public final class WhereBuilder {
      * Only non-null bounds are applied.
      */
     public ClickHouseQuery between(Instant from, Instant to) {
-        String base = ClickHouseQuery.toCamelCase(column);
+        String base = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
         if (from != null) {
             String p = base + "From";
             query.whereClauses.add(column + " >= :" + p);
@@ -119,7 +119,7 @@ public final class WhereBuilder {
      * Only non-null bounds are applied.
      */
     public ClickHouseQuery between(Object from, Object to) {
-        String base = ClickHouseQuery.toCamelCase(column);
+        String base = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
         if (from != null) {
             String p = base + "From";
             query.whereClauses.add(column + " >= :" + p);
@@ -139,7 +139,7 @@ public final class WhereBuilder {
      */
     public <T> ClickHouseQuery in(Collection<T> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = ClickHouseQuery.toCamelCase(column);
+        String prefix = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
         StringJoiner joiner = new StringJoiner(", ");
         int i = 0;
         for (T val : values) {
@@ -158,7 +158,7 @@ public final class WhereBuilder {
      */
     public <T> ClickHouseQuery notIn(Collection<T> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = ClickHouseQuery.toCamelCase(column) + "Not";
+        String prefix = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Not";
         StringJoiner joiner = new StringJoiner(", ");
         int i = 0;
         for (T val : values) {
@@ -207,5 +207,15 @@ public final class WhereBuilder {
         query.whereClauses.add(column + " NOT IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));
         return query;
+    }
+
+    /**
+     * Strip table prefix from column name for param naming.
+     * Example: "o.user_id" → "user_id", "user_id" → "user_id"
+     */
+    private String stripTablePrefix(String column) {
+        return column.contains(".") 
+            ? column.substring(column.lastIndexOf('.') + 1) 
+            : column;
     }
 }

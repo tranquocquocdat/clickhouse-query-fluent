@@ -27,6 +27,9 @@ public final class Page<T> {
     private final int pageSize;
 
     public Page(List<T> data, long total, int page, int pageSize) {
+        if (pageSize <= 0) {
+            throw new IllegalArgumentException("pageSize must be > 0, got: " + pageSize);
+        }
         this.data = data;
         this.total = total;
         this.page = page;

@@ -249,23 +249,20 @@ public final class OrBuilder {
          */
         public OrBuilder between(java.time.Instant from, java.time.Instant to) {
             if (from == null && to == null) return or;
-            java.time.format.DateTimeFormatter fmt =
-                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
-                            .withZone(java.time.ZoneOffset.UTC);
             if (from != null && to != null) {
                 String pFrom = or.nextParam();
                 String pTo = or.nextParam();
                 or.conditions.add("(" + column + " >= :" + pFrom + " AND " + column + " <= :" + pTo + ")");
-                or.query.params.addValue(pFrom, fmt.format(from));
-                or.query.params.addValue(pTo, fmt.format(to));
+                or.query.params.addValue(pFrom, lib.core.clickhouse.util.ClickHouseDateUtil.format(from));
+                or.query.params.addValue(pTo, lib.core.clickhouse.util.ClickHouseDateUtil.format(to));
             } else if (from != null) {
                 String p = or.nextParam();
                 or.conditions.add(column + " >= :" + p);
-                or.query.params.addValue(p, fmt.format(from));
+                or.query.params.addValue(p, lib.core.clickhouse.util.ClickHouseDateUtil.format(from));
             } else {
                 String p = or.nextParam();
                 or.conditions.add(column + " <= :" + p);
-                or.query.params.addValue(p, fmt.format(to));
+                or.query.params.addValue(p, lib.core.clickhouse.util.ClickHouseDateUtil.format(to));
             }
             return or;
         }
