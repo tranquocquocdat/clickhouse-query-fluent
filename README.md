@@ -37,10 +37,10 @@ Page<SalesReport> report = ClickHouseQuery
 
     // ── WITH (CTE) ─────────────────────────────────────────────
     .with("active_products",
-        ClickHouseQuery.select("product_id")
-            .from("product_config")
-            .where("status").eq("ACTIVE")
-            .where("tenant_id").eq(tenantId)
+        ClickHouseQuery.select(cfg.col("product_id"))
+            .from(cfg)
+            .where(cfg.col("status")).eq("ACTIVE")
+            .where(cfg.col("tenant_id")).eq(tenantId)
     )
 
     // ── SELECT: aggregates + arithmetic + conditional aggs + CASE WHEN
@@ -103,8 +103,8 @@ Page<SalesReport> report = ClickHouseQuery
     )
 
     // ── FROM + 4 JOIN types ────────────────────────────────────
-    .from("active_products")                                                    // FROM (CTE)
-    .join(oi).on(oi.col("product_id"), "active_products.product_id")           // INNER JOIN
+    .from(Alias.of("active_products"))                                           // FROM (CTE)
+    .join(oi).on(oi.col("product_id"), CH.col("active_products.product_id"))   // INNER JOIN
     .leftJoin(u).on(u.col("id"), oi.col("user_id"))                           // LEFT JOIN
     .rightJoin(cfg).on(cfg.col("product_id"), oi.col("product_id"))           // RIGHT JOIN
     .fullJoin(rb).on(rb.col("session_id"), oi.col("session_id"))              // FULL OUTER JOIN
@@ -125,12 +125,12 @@ Page<SalesReport> report = ClickHouseQuery
     .where(p.col("category")).eqIfNotBlank(categoryFilter)  // eqIfNotBlank
     .where(oi.col("is_sample")).eqIf(sampleOnly, 1)         // eqIf
     .where(u.col("id")).in(                               // in(subquery)
-        ClickHouseQuery.select("user_id").from("premium_list")
-            .where("tenant_id").eq(tenantId)
+        ClickHouseQuery.select(CH.col("user_id")).from(Alias.of("premium_list"))
+            .where(CH.col("tenant_id")).eq(tenantId)
     )
     .where(u.col("id")).notIn(                            // notIn(subquery)
-        ClickHouseQuery.select("user_id").from("blocked_users")
-            .where("active").eq(1)
+        ClickHouseQuery.select(CH.col("user_id")).from(Alias.of("blocked_users"))
+            .where(CH.col("active")).eq(1)
     )
     .whereRaw("toYYYYMM(oi.created_at) = toYYYYMM(now())")  // whereRaw
     .whereILike(keyword).on(u.col("username"), oi.col("session_id"))   // ILIKE multi-col
@@ -159,7 +159,7 @@ Page<SalesReport> report = ClickHouseQuery
     .havingRaw("sum(cost) < sum(revenue) * 0.99")
 
     // ── ORDER BY (multiple columns) ───────────────────────────
-    .orderBy("total_revenue", SortOrder.DESC)
+    .orderBy(CH.col("total_revenue"), SortOrder.DESC)
     .orderBy(p.col("product_name"), SortOrder.ASC)
 
     // ── PAGINATED EXECUTION: data + total count in ONE query ──
@@ -176,24 +176,27 @@ boolean hasPrev           = report.hasPrevious();
 // ══════════════════════════════════════════════════════════════════
 // 3. SELECT DISTINCT
 // ══════════════════════════════════════════════════════════════════
+Alias oItems = Alias.of("order_items");
 List<String> currencies = ClickHouseQuery
-    .selectDistinct("currency")
-    .from("order_items")
-    .where("tenant_id").eq(tenantId)
+    .selectDistinct(oItems.col("currency"))
+    .from(oItems)
+    .where(oItems.col("tenant_id")).eq(tenantId)
     .query(namedJdbc, String.class);
 
 
 // ══════════════════════════════════════════════════════════════════
 // 4. UNION ALL — combine partitioned tables
 // ══════════════════════════════════════════════════════════════════
+Alias o24 = Alias.of("order_items_2024");
+Alias o25 = Alias.of("order_items_2025");
 List<UserSummary> history = ClickHouseQuery
-    .select("user_id", sum("revenue").as("total"))
-    .from("order_items_2024").where("tenant_id").eq(tenantId).groupBy("user_id")
+    .select(o24.col("user_id"), sum("revenue").as("total"))
+    .from(o24).where(o24.col("tenant_id")).eq(tenantId).groupBy(o24.col("user_id"))
     .unionAll(
-        ClickHouseQuery.select("user_id", sum("revenue").as("total"))
-            .from("order_items_2025").where("tenant_id").eq(tenantId).groupBy("user_id")
+        ClickHouseQuery.select(o25.col("user_id"), sum("revenue").as("total"))
+            .from(o25).where(o25.col("tenant_id")).eq(tenantId).groupBy(o25.col("user_id"))
     )
-    .orderBy("total", SortOrder.DESC)
+    .orderBy(CH.col("total"), SortOrder.DESC)
     .limit(100)
     .query(namedJdbc, UserSummary.class);
 
@@ -203,15 +206,15 @@ List<UserSummary> history = ClickHouseQuery
 // ══════════════════════════════════════════════════════════════════
 List<UserRankRow> ranked = ClickHouseQuery
     .select(sub.col("user_id"), sub.col("total"),
-            rank().over().orderBy("total", SortOrder.DESC).as("rank"))
+            rank().over().orderBy(CH.col("total"), SortOrder.DESC).as("rank"))
     .from(
-        ClickHouseQuery.select("user_id", sum("revenue").as("total"))
-            .from("order_items").where("tenant_id").eq(tenantId)
-            .groupBy("user_id"),
+        ClickHouseQuery.select(oi.col("user_id"), sum("revenue").as("total"))
+            .from(oi).where(oi.col("tenant_id")).eq(tenantId)
+            .groupBy(oi.col("user_id")),
         sub
     )
     .where(sub.col("total")).gt(minTotal)
-    .orderBy("rank", SortOrder.ASC)
+    .orderBy(CH.col("rank"), SortOrder.ASC)
     .limit(50)
     .query(namedJdbc, UserRankRow.class);
 
@@ -219,27 +222,29 @@ List<UserRankRow> ranked = ClickHouseQuery
 // ══════════════════════════════════════════════════════════════════
 // 5b. WINDOW FUNCTIONS — running totals, ranking, lag/lead
 // ══════════════════════════════════════════════════════════════════
+Alias t = Alias.of("order_items").as("t");
+
+// 5b. WINDOW FUNCTIONS
 List<RunningReport> running = ClickHouseQuery
     .select(
-        col("user_id"),
-        col("amount"),
-        sum("amount").over().partitionBy("user_id").orderBy("created_at").as("running_total"),
-        rowNumber().over().partitionBy("game_id").orderBy("amount", SortOrder.DESC).as("rank"),
-        lag("amount").over().partitionBy("user_id").orderBy("created_at").as("prev_amount")
+        t.col("user_id"),
+        t.col("amount"),
+        sum("amount").over().partitionBy(t.col("user_id")).orderBy(t.col("created_at")).as("running_total"),
+        rowNumber().over().partitionBy(t.col("game_id")).orderBy(t.col("amount"), SortOrder.DESC).as("rank"),
+        lag("amount").over().partitionBy(t.col("user_id")).orderBy(t.col("created_at")).as("prev_amount")
     )
-    .from("order_items")
-    .where("tenant_id").eq(tenantId)
+    .from(t)
+    .where(t.col("tenant_id")).eq(tenantId)
     .query(namedJdbc, RunningReport.class);
 
 
-// ══════════════════════════════════════════════════════════════════
-// 5c. GROUP BY WITH TOTALS — ClickHouse-specific summary row
-// ══════════════════════════════════════════════════════════════════
+// 5c. GROUP BY WITH TOTALS
+Alias g = Alias.of("order_items").as("g");
 List<GameSummary> summaries = ClickHouseQuery
-    .select("game_id", sum("amount").as("total"), count().as("cnt"))
-    .from("order_items")
-    .where("tenant_id").eq(tenantId)
-    .groupByWithTotals("game_id")
+    .select(g.col("game_id"), sum("amount").as("total"), count().as("cnt"))
+    .from(g)
+    .where(g.col("tenant_id")).eq(tenantId)
+    .groupByWithTotals(g.col("game_id"))
     .query(namedJdbc, GameSummary.class);
 // → Last row contains totals across ALL groups
 
@@ -248,24 +253,27 @@ List<GameSummary> summaries = ClickHouseQuery
 // 6. queryOne (single row) + terminal count + subquery count
 // ══════════════════════════════════════════════════════════════════
 // Single DTO (returns null if no rows)
+Alias ds = Alias.of("order_items");
 DailySummary today = ClickHouseQuery
     .select(sum("revenue").as("total_revenue"), count().as("total_orders"))
-    .from("order_items")
-    .where("tenant_id").eq(tenantId)
-    .where("created_at").between(Instant.now().minus(1, ChronoUnit.DAYS), Instant.now())
+    .from(ds)
+    .where(ds.col("tenant_id")).eq(tenantId)
+    .where(ds.col("created_at")).between(Instant.now().minus(1, ChronoUnit.DAYS), Instant.now())
     .queryOne(namedJdbc, DailySummary.class);
 
 // Terminal .count() on the query itself
-long totalRows = ClickHouseQuery.select("1")
-    .from("order_items")
-    .where("tenant_id").eq(tenantId)
+Alias c = Alias.of("order_items");
+long totalRows = ClickHouseQuery.select(CH.raw("1"))
+    .from(c)
+    .where(c.col("tenant_id")).eq(tenantId)
     .count(namedJdbc);
 
 // Static ClickHouseQuery.count(subQuery)
+Alias sc = Alias.of("order_items");
 long distinctSessions = ClickHouseQuery.count(
-    ClickHouseQuery.select("user_id", "session_id")
-        .from("order_items").where("tenant_id").eq(tenantId)
-        .groupBy("user_id", "session_id")
+    ClickHouseQuery.select(sc.col("user_id"), sc.col("session_id"))
+        .from(sc).where(sc.col("tenant_id")).eq(tenantId)
+        .groupBy(sc.col("user_id"), sc.col("session_id"))
 ).execute(namedJdbc);
 
 
@@ -370,16 +378,18 @@ dependencies { implementation 'lib.core:clickhouse-query-builder:1.0.0' }
 ```java
 import static lib.core.clickhouse.expression.CH.*;
 
+Alias o = Alias.of("orders");
+
 List<Order> orders = ClickHouseQuery
-    .select(col("user_id"), sum("amount").as("total"))
-    .from("orders")
-    .where("tenant_id").eq(tenantId)
-    .where("created_at").between(fromDate, toDate)
-    .where("status").eqIfNotBlank(status)       // skipped if blank
-    .where("category_id").in(categoryIds)       // IN (list)
-    .where("deleted_at").isNull()
-    .groupBy("user_id")
-    .orderBy("total", SortOrder.DESC)
+    .select(o.col("user_id"), sum("amount").as("total"))
+    .from(o)
+    .where(o.col("tenant_id")).eq(tenantId)
+    .where(o.col("created_at")).between(fromDate, toDate)
+    .where(o.col("status")).eqIfNotBlank(status)       // skipped if blank
+    .where(o.col("category_id")).in(categoryIds)       // IN (list)
+    .where(o.col("deleted_at")).isNull()
+    .groupBy(o.col("user_id"))
+    .orderBy(CH.col("total"), SortOrder.DESC)
     .limit(10).offset(0)
     .query(namedJdbc, Order.class);              // auto DTO mapping
 ```
@@ -445,7 +455,7 @@ ClickHouseQuery.select(
 > .groupBy("name")                   // name từ bảng nào?
 > ```
 >
-> **Quy tắc:** Đơn bảng → tùy chọn. JOIN → **bắt buộc** dùng `alias.col("col")`, `alias.sum("col")`, `alias.caseWhen("col")`, v.v.
+> **Quy tắc:** **Luôn dùng** `alias.col("col")`, `alias.sum("col")`, `CH.col("alias_field")`, `CH.raw("expr")`. Tất cả String-based methods đã bị `@Deprecated`.
 
 ### 3. Fluent JOIN
 
@@ -472,31 +482,34 @@ ClickHouseQuery
 ### 4. WHERE Operators
 
 ```java
-.where("amount").gt(100)              // amount > 100
-.where("amount").gte(100)             // amount >= 100
-.where("amount").lt(50)               // amount < 50
-.where("amount").lte(50)              // amount <= 50
-.where("status").eq("ACTIVE")         // status = 'ACTIVE'
-.where("status").ne("DELETED")        // status != 'DELETED'
-.where("category_id").in(ids)         // category_id IN (:id0, :id1, ...)
-.where("category_id").notIn(excluded) // category_id NOT IN (...)
-.where("deleted_at").isNull()         // deleted_at IS NULL
-.where("error").isNotNull()           // error IS NOT NULL
-.where("created_at").between(from, to) // created_at >= :from AND created_at <= :to
-.where("status").eqIfNotBlank(status) // skipped if null/blank
-.where("role").eqIf(hasRole, role)    // skipped if condition false
+Alias o = Alias.of("orders");
+
+.where(o.col("amount")).gt(100)              // amount > 100
+.where(o.col("amount")).gte(100)             // amount >= 100
+.where(o.col("amount")).lt(50)               // amount < 50
+.where(o.col("amount")).lte(50)              // amount <= 50
+.where(o.col("status")).eq("ACTIVE")         // status = 'ACTIVE'
+.where(o.col("status")).ne("DELETED")        // status != 'DELETED'
+.where(o.col("category_id")).in(ids)         // category_id IN (:id0, :id1, ...)
+.where(o.col("category_id")).notIn(excluded) // category_id NOT IN (...)
+.where(o.col("deleted_at")).isNull()         // deleted_at IS NULL
+.where(o.col("error")).isNotNull()           // error IS NOT NULL
+.where(o.col("created_at")).between(from, to) // created_at >= :from AND created_at <= :to
+.where(o.col("status")).eqIfNotBlank(status) // skipped if null/blank
+.where(o.col("role")).eqIf(hasRole, role)    // skipped if condition false
 ```
 
 > **Null-safe**: All operators (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `notIn`, `between`) **silently skip** the clause when value is `null`. No manual null checks needed.
 
 ```java
+Alias o = Alias.of("orders");
 String status = request.getStatus();     // may be null
 Integer minAmount = request.getMin();    // may be null
 
-ClickHouseQuery.select("*").from("orders")
-    .where("status").eq(status)          // skipped if null
-    .where("amount").gt(minAmount)       // skipped if null
-    .where("tenant_id").eq("op-1")       // always applied
+ClickHouseQuery.select(CH.raw("*")).from(o)
+    .where(o.col("status")).eq(status)          // skipped if null
+    .where(o.col("amount")).gt(minAmount)       // skipped if null
+    .where(o.col("tenant_id")).eq("op-1")       // always applied
     .query(namedJdbc, Order.class);
 // → SELECT * FROM orders WHERE tenant_id = :tenantId
 ```
@@ -514,20 +527,22 @@ WHERE  ①  AND  ②  AND  (③a OR ③b)  AND  (④a OR ④b)
 ```
 
 ```java
-ClickHouseQuery.select("*")
-    .from("orders")
-    .where("tenant_id").eq(tenantId)            // AND
+Alias o = Alias.of("orders");
+
+ClickHouseQuery.select(CH.raw("*"))
+    .from(o)
+    .where(o.col("tenant_id")).eq(tenantId)            // AND
     .whereOr(or -> or                            // AND (
-        .where("status").eq("ACTIVE")            //   status = 'ACTIVE'
-        .where("status").eq("PENDING")           //   OR status = 'PENDING'
+        .where(o.col("status")).eq("ACTIVE")            //   status = 'ACTIVE'
+        .where(o.col("status")).eq("PENDING")           //   OR status = 'PENDING'
     )                                            // )
     .whereOr(or -> or                            // AND (
-        .where("type").in(List.of("PREMIUM"))    //   type IN ('PREMIUM')
-        .where("amount").gt(5000)                //   OR amount > 5000
-        .where("name").ilike("john")             //   OR name ILIKE '%john%'
-        .where("deleted_at").isNull()            //   OR deleted_at IS NULL
-        .where("user_id").in(                    //   OR user_id IN (subquery)
-            ClickHouseQuery.select("id").from("premium_users")
+        .where(o.col("type")).in(List.of("PREMIUM"))    //   type IN ('PREMIUM')
+        .where(o.col("amount")).gt(5000)                //   OR amount > 5000
+        .where(o.col("name")).ilike("john")             //   OR name ILIKE '%john%'
+        .where(o.col("deleted_at")).isNull()            //   OR deleted_at IS NULL
+        .where(o.col("user_id")).in(                    //   OR user_id IN (subquery)
+            ClickHouseQuery.select(CH.col("id")).from(Alias.of("premium_users"))
         )
     )                                            // )
     .query(namedJdbc, Order.class);
@@ -571,15 +586,17 @@ ClickHouseQuery.select("*")
 ### 7. Subquery (IN / NOT IN)
 
 ```java
-.where("product_id").in(
-    ClickHouseQuery.select("id")
-        .from("products")
-        .where("active").eq(1)
+Alias p = Alias.of("products");
+
+.where(p.col("product_id")).in(
+    ClickHouseQuery.select(CH.col("id"))
+        .from(Alias.of("products"))
+        .where(CH.col("active")).eq(1)
 )
-.where("user_id").notIn(
-    ClickHouseQuery.select("id")
-        .from("blocked_users")
-        .where("status").eq("BLOCKED")
+.where(p.col("user_id")).notIn(
+    ClickHouseQuery.select(CH.col("id"))
+        .from(Alias.of("blocked_users"))
+        .where(CH.col("status")).eq("BLOCKED")
 )
 ```
 
@@ -659,15 +676,17 @@ countDistinct(oi.col("user_id"), oi.col("session_id")).as("total_sessions")
 ```java
 import static lib.core.clickhouse.expression.CH.*;
 
+Alias o = Alias.of("orders");
+
 ClickHouseQuery.select(
-    col("product_id"),
+    o.col("product_id"),
     sumIf("amount").where("action").eq("SALE").as("total_sales"),
     countIf("user_id").where("status").eq("ACTIVE").as("active_count"),
     minIf("amount").where("type").eq("PURCHASE").as("min_purchase"),
     maxIf("amount").where("score").gt(100).as("max_order"),
     avgIf("score").where("status").isNotNull().as("avg_score"),
     countIf("user_id").where("tier").in("GOLD", "PREMIUM").as("premium_count")
-).from("orders").groupBy("product_id");
+).from(o).groupBy(o.col("product_id"));
 ```
 
 **Raw (explicit):**
@@ -680,9 +699,11 @@ countIfRaw("user_id", in("tier", "GOLD", "PREMIUM")).as("premium_count")
 ### 12. HAVING with Aggregates
 
 ```java
-ClickHouseQuery.select("user_id", sum("amount").as("total"))
-    .from("orders")
-    .groupBy("user_id")
+Alias o = Alias.of("orders");
+
+ClickHouseQuery.select(o.col("user_id"), sum("amount").as("total"))
+    .from(o)
+    .groupBy(o.col("user_id"))
     .having(sum("amount")).gt(1000)
     .having(count()).gte(5)
     .having(avg("score")).between(50, 100)
@@ -697,14 +718,14 @@ Alias orders = Alias.of("orders");
 
 ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
     .from(
-        ClickHouseQuery.select(col("user_id"), sum("amount").as("total"))
+        ClickHouseQuery.select(orders.col("user_id"), sum("amount").as("total"))
             .from(orders)
             .where(orders.col("tenant_id")).eq(tenantId)
-            .groupBy("user_id"),
+            .groupBy(orders.col("user_id")),
         sub
     )
     .where(sub.col("total")).gt(1000)
-    .orderBy("total", SortOrder.DESC)
+    .orderBy(CH.col("total"), SortOrder.DESC)
     .limit(10)
     .query(namedJdbc, Report.class);
 // → SELECT sub.user_id, sub.total FROM (SELECT ... GROUP BY user_id) AS sub WHERE sub.total > ...
@@ -714,17 +735,21 @@ ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
 
 ```java
 // Combine results from multiple tables
-ClickHouseQuery.select("user_id", "amount").from("orders_2024")
-    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
-    .orderBy("amount", SortOrder.DESC)
+Alias t24 = Alias.of("orders_2024");
+Alias t25 = Alias.of("orders_2025");
+
+ClickHouseQuery.select(t24.col("user_id"), t24.col("amount")).from(t24)
+    .unionAll(ClickHouseQuery.select(t25.col("user_id"), t25.col("amount")).from(t25))
+    .orderBy(CH.col("amount"), SortOrder.DESC)
     .limit(10)
     .query(namedJdbc, Report.class);
 
 // Chain 3+ unions
-ClickHouseQuery.select("user_id", "amount").from("orders_2023")
-    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2024"))
-    .unionAll(ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
-    .orderBy("amount", SortOrder.DESC)
+Alias t23 = Alias.of("orders_2023");
+ClickHouseQuery.select(t23.col("user_id"), t23.col("amount")).from(t23)
+    .unionAll(ClickHouseQuery.select(t24.col("user_id"), t24.col("amount")).from(t24))
+    .unionAll(ClickHouseQuery.select(t25.col("user_id"), t25.col("amount")).from(t25))
+    .orderBy(CH.col("amount"), SortOrder.DESC)
     .query(namedJdbc, Report.class);
 ```
 
@@ -734,10 +759,11 @@ ClickHouseQuery.select("user_id", "amount").from("orders_2023")
 // Single CTE
 Alias au = Alias.of("active_users").as("au");
 Alias o  = Alias.of("orders").as("o");
+Alias users = Alias.of("users");
 
 ClickHouseQuery
     .with("active_users",
-        ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+        ClickHouseQuery.select(users.col("user_id")).from(users).where(users.col("status")).eq("ACTIVE"))
     .select(au.col("user_id"), count().as("order_count"))
     .from(au)
     .join(o).on(au.col("user_id"), o.col("user_id"))
@@ -747,13 +773,15 @@ ClickHouseQuery
 // Multiple CTEs
 Alias u = Alias.of("cte_users").as("u");
 Alias uo = Alias.of("cte_orders").as("uo");
+Alias usersT = Alias.of("users");
+Alias ordersT = Alias.of("orders");
 
 ClickHouseQuery
     .with("cte_users",
-        ClickHouseQuery.select("user_id").from("users").where("status").eq("ACTIVE"))
+        ClickHouseQuery.select(usersT.col("user_id")).from(usersT).where(usersT.col("status")).eq("ACTIVE"))
     .with("cte_orders",
-        ClickHouseQuery.select("user_id", "sum(amount) AS total")
-            .from("orders").groupBy("user_id"))
+        ClickHouseQuery.select(ordersT.col("user_id"), sum("amount").as("total"))
+            .from(ordersT).groupBy(ordersT.col("user_id")))
     .select(u.col("user_id"), uo.col("total"))
     .from(u)
     .join(uo).on(uo.col("user_id"), u.col("user_id"))
@@ -764,22 +792,24 @@ ClickHouseQuery
 ### 16. Subquery Count
 
 ```java
+Alias oi = Alias.of("order_items");
+
 // Style 1 — Static count
 long total = ClickHouseQuery
     .count(
-        ClickHouseQuery.select("user_id", "order_id")
-            .from("order_items")
-            .where("created_at").between(from, to)
-            .groupBy("user_id", "order_id")
+        ClickHouseQuery.select(oi.col("user_id"), oi.col("order_id"))
+            .from(oi)
+            .where(oi.col("created_at")).between(from, to)
+            .groupBy(oi.col("user_id"), oi.col("order_id"))
     )
     .execute(namedJdbc);
 
 // Style 2 — Terminal count
 long total = ClickHouseQuery
-    .select("user_id", "order_id")
-    .from("order_items")
-    .where("created_at").between(from, to)
-    .groupBy("user_id", "order_id")
+    .select(oi.col("user_id"), oi.col("order_id"))
+    .from(oi)
+    .where(oi.col("created_at")).between(from, to)
+    .groupBy(oi.col("user_id"), oi.col("order_id"))
     .count(namedJdbc);
 ```
 
@@ -788,10 +818,12 @@ long total = ClickHouseQuery
 Get paginated data **and total count in one query** — no extra `COUNT(*)` query:
 
 ```java
-Page<Report> page = ClickHouseQuery.select("user_id", "amount")
-    .from("orders")
-    .where("tenant_id").eq(tenantId)
-    .orderBy("amount", SortOrder.DESC)
+Alias o = Alias.of("orders");
+
+Page<Report> page = ClickHouseQuery.select(o.col("user_id"), o.col("amount"))
+    .from(o)
+    .where(o.col("tenant_id")).eq(tenantId)
+    .orderBy(o.col("amount"), SortOrder.DESC)
     .queryPage(0, 10, namedJdbc, Report.class);   // page 0, size 10
 
 page.getData();       // List<Report> — max 10 items
@@ -816,11 +848,13 @@ public record OrderReport(
     long orderCount            // ← auto mapped from order_count
 ) {}
 
+Alias o = Alias.of("orders");
+
 List<OrderReport> reports = ClickHouseQuery.select(
-        col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
+        o.col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
     )
-    .from("orders")
-    .groupBy("user_id")
+    .from(o)
+    .groupBy(o.col("user_id"))
     .query(namedJdbc, OrderReport.class);   // auto RecordRowMapper
 ```
 
@@ -834,26 +868,30 @@ public class OrderReport {
     // getters + setters (required)
 }
 
+Alias o = Alias.of("orders");
+
 List<OrderReport> reports = ClickHouseQuery.select(
-        col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
+        o.col("user_id"), sum("amount").as("total_amount"), count().as("order_count")
     )
-    .from("orders")
-    .groupBy("user_id")
+    .from(o)
+    .groupBy(o.col("user_id"))
     .query(namedJdbc, OrderReport.class);   // auto BeanPropertyRowMapper
 ```
 
 **Common usage:**
 
 ```java
+Alias o = Alias.of("orders");
+
 // Single result
-OrderSummary summary = ClickHouseQuery.select("count(*) AS total_orders")
-    .from("orders")
+OrderSummary summary = ClickHouseQuery.select(count().as("total_orders"))
+    .from(o)
     .queryOne(namedJdbc, OrderSummary.class);     // single DTO or null
 
 // Page with auto mapping
-Page<OrderReport> page = ClickHouseQuery.select(col("user_id"), sum("amount").as("total"))
-    .from("orders")
-    .groupBy("user_id")
+Page<OrderReport> page = ClickHouseQuery.select(o.col("user_id"), sum("amount").as("total"))
+    .from(o)
+    .groupBy(o.col("user_id"))
     .queryPage(0, 10, namedJdbc, OrderReport.class);
 ```
 
@@ -864,11 +902,13 @@ Page<OrderReport> page = ClickHouseQuery.select(col("user_id"), sum("amount").as
 **Manual RowMapper** — for complex mapping, transformation, or when column names don't match:
 
 ```java
+Alias o = Alias.of("orders");
+
 List<OrderReport> reports = ClickHouseQuery.select(
-        col("user_id"), sum("amount").as("total"), count().as("cnt")
+        o.col("user_id"), sum("amount").as("total"), count().as("cnt")
     )
-    .from("orders")
-    .groupBy("user_id")
+    .from(o)
+    .groupBy(o.col("user_id"))
     .query(namedJdbc, (rs, rowNum) -> {
         OrderReport r = new OrderReport();
         r.setUserId(rs.getString("user_id"));
@@ -890,13 +930,15 @@ List<OrderReport> reports = ClickHouseQuery.select(
 Auto `LIMIT 1000` when `.query()` is called without an explicit `.limit()`:
 
 ```java
+Alias o = Alias.of("orders");
+
 // No .limit() → auto LIMIT 1000
-ClickHouseQuery.select("*").from("orders")
+ClickHouseQuery.select(CH.raw("*")).from(o)
     .query(namedJdbc, Order.class);
 // → SQL: ... LIMIT 1000
 
 // Explicit .limit() → your value
-ClickHouseQuery.select("*").from("orders")
+ClickHouseQuery.select(CH.raw("*")).from(o)
     .limit(50)
     .query(namedJdbc, Order.class);
 // → SQL: ... LIMIT 50
@@ -972,24 +1014,26 @@ o.sum("amount").over().partitionBy(o.col("game_id")).orderBy(o.col("created_at")
 ClickHouse supports special GROUP BY modifiers for multi-level aggregation:
 
 ```java
+Alias o = Alias.of("orders");
+
 // WITH TOTALS — adds an extra summary row with totals across all groups
-ClickHouseQuery.select("game_id", sum("amount").as("total"))
-    .from("orders")
-    .groupByWithTotals("game_id")
+ClickHouseQuery.select(o.col("game_id"), sum("amount").as("total"))
+    .from(o)
+    .groupByWithTotals(o.col("game_id"))
     .query(namedJdbc, Report.class);
 // → GROUP BY game_id WITH TOTALS
 
 // WITH ROLLUP — hierarchical subtotals from right to left
-ClickHouseQuery.select("operator_id", "game_id", sum("amount").as("total"))
-    .from("orders")
-    .groupByWithRollup("operator_id", "game_id")
+ClickHouseQuery.select(o.col("operator_id"), o.col("game_id"), sum("amount").as("total"))
+    .from(o)
+    .groupByWithRollup(o.col("operator_id"), o.col("game_id"))
     .query(namedJdbc, Report.class);
 // → GROUP BY operator_id, game_id WITH ROLLUP
 
 // WITH CUBE — subtotals for all combinations of dimensions
-ClickHouseQuery.select("operator_id", "game_id", sum("amount").as("total"))
-    .from("orders")
-    .groupByWithCube("operator_id", "game_id")
+ClickHouseQuery.select(o.col("operator_id"), o.col("game_id"), sum("amount").as("total"))
+    .from(o)
+    .groupByWithCube(o.col("operator_id"), o.col("game_id"))
     .query(namedJdbc, Report.class);
 // → GROUP BY operator_id, game_id WITH CUBE
 ```
@@ -998,7 +1042,7 @@ ClickHouseQuery.select("operator_id", "game_id", sum("amount").as("total"))
 > **WITH TOTALS** is the most commonly used — ideal for session/game summary reports.
 > Combine with HAVING for filtered totals:
 > ```java
-> .groupByWithTotals("game_id")
+> .groupByWithTotals(o.col("game_id"))
 > .having(sum("amount")).gt(1000)
 > ```
 
@@ -1027,17 +1071,19 @@ SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMI
 ```
 
 ```java
+Alias t = Alias.of("t");
+
 // ❌ Throws IllegalStateException
-ClickHouseQuery.select("user_id")
-    .from("t")
-    .groupBy("user_id")
-    .where("status").eq("ACTIVE");   // ERROR: cannot call WHERE after GROUP_BY
+ClickHouseQuery.select(t.col("user_id"))
+    .from(t)
+    .groupBy(t.col("user_id"))
+    .where(t.col("status")).eq("ACTIVE");   // ERROR: cannot call WHERE after GROUP_BY
 
 // ✅ Correct order
-ClickHouseQuery.select("user_id")
-    .from("t")
-    .where("status").eq("ACTIVE")
-    .groupBy("user_id");
+ClickHouseQuery.select(t.col("user_id"))
+    .from(t)
+    .where(t.col("status")).eq("ACTIVE")
+    .groupBy(t.col("user_id"));
 ```
 
 - Same phase is allowed (e.g. multiple `.where()` calls)
@@ -1052,8 +1098,9 @@ ClickHouseQuery.select("user_id")
 
 | Method | Output |
 |---|---|
-| `col("name")` | `name` |
-| `col("name", "alias")` | `name AS alias` |
+| `col("name")` | `Expr("name")` — type-safe column reference |
+| `col("name", "alias")` | `Expr("name AS alias")` |
+| `raw("expr")` | `Expr("expr")` — raw SQL expression |
 | `count()` | `count(*)` |
 | `count("col")` | `count(col)` |
 | `countDistinct("col")` | `countDistinct(col)` |
