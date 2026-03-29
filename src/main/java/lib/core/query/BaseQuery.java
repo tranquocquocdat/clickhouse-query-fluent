@@ -1,6 +1,8 @@
 package lib.core.query;
 
 import lib.core.query.builder.*;
+import lib.core.query.cache.CacheOptions;
+import lib.core.query.cache.QueryCacheManager;
 import lib.core.query.expression.CommonFunctions;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.RowCallbackHandler;
@@ -8,8 +10,13 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -86,6 +93,9 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     // WITH (CTE)
     protected final List<String[]> cteList = new ArrayList<>();
+
+    // Cache
+    protected CacheOptions cacheOptions;
 
     /**
      * Package-private constructor prevents external instantiation.
@@ -620,6 +630,53 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return params;
     }
 
+    // ── Cache ────────────────────────────────────────────────────────────
+
+    /**
+     * Enable caching for this query using an auto-generated Key based on SQL and
+     * parameters.
+     * The results will be fetched from the cache if available. On a cache miss, the
+     * DB
+     * is queried and the result is stored back into the cache.
+     *
+     * <p>
+     * Safe to use with {@link #query}, {@link #queryOne}, and {@link #queryPage}.
+     * Not applicable for {@link #stream} or {@link #streamBatch}.
+     *
+     * @param manager    the implementation connecting to Redis/Caffeine/etc.
+     * @param ttlSeconds time-to-live in seconds
+     */
+    @SuppressWarnings("unchecked")
+    public T cached(QueryCacheManager manager, long ttlSeconds) {
+        this.cacheOptions = new CacheOptions(manager, ttlSeconds);
+        return (T) this;
+    }
+
+    /**
+     * Enable caching for this query.
+     *
+     * @param manager the implementation connecting to Redis/Caffeine/etc.
+     * @param ttl     time-to-live
+     */
+    public T cached(QueryCacheManager manager, Duration ttl) {
+        return cached(manager, ttl.getSeconds());
+    }
+
+    private String generateCacheKey() {
+        String base = toSql() + "||" + params.getValues().toString();
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(base.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder("cq:");
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "cq:" + Integer.toHexString(base.hashCode());
+        }
+    }
+
     // ── Execute ──────────────────────────────────────────────────────────
 
     /**
@@ -647,7 +704,29 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     @SuppressWarnings("unchecked")
     public <R> List<R> query(NamedParameterJdbcTemplate jdbc, Class<R> type) {
-        return query(jdbc, smartMapper(type));
+        String cacheKey = null;
+        if (cacheOptions != null) {
+            cacheKey = generateCacheKey();
+            try {
+                Object cachedData = cacheOptions.getManager().get(cacheKey, type, true);
+                if (cachedData != null) {
+                    return (List<R>) cachedData;
+                }
+            } catch (Exception e) {
+                // Ignore cache read error, fallback to DB
+            }
+        }
+
+        List<R> results = query(jdbc, smartMapper(type));
+
+        if (cacheOptions != null && cacheKey != null) {
+            try {
+                cacheOptions.getManager().put(cacheKey, results, cacheOptions.getTtlSeconds());
+            } catch (Exception e) {
+                // Ignore cache write error
+            }
+        }
+        return results;
     }
 
     /**
@@ -659,8 +738,34 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      * @return the mapped DTO, or null if no result
      */
     public <R> R queryOne(NamedParameterJdbcTemplate jdbc, Class<R> type) {
+        if (this.limitVal == null) {
+            this.limitVal = 1; // Limit Guard for queryOne
+        }
+
+        String cacheKey = null;
+        if (cacheOptions != null) {
+            cacheKey = generateCacheKey() + "_one";
+            try {
+                Object cachedData = cacheOptions.getManager().get(cacheKey, type, false);
+                if (cachedData != null) {
+                    return (R) cachedData;
+                }
+            } catch (Exception e) {
+                // Ignore cache read error
+            }
+        }
+
         List<R> results = query(jdbc, type);
-        return results.isEmpty() ? null : results.get(0);
+        R result = results.isEmpty() ? null : results.get(0);
+
+        if (cacheOptions != null && cacheKey != null && result != null) {
+            try {
+                cacheOptions.getManager().put(cacheKey, result, cacheOptions.getTtlSeconds());
+            } catch (Exception e) {
+                // Ignore cache write error
+            }
+        }
+        return result;
     }
 
     /**
@@ -732,7 +837,29 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     @SuppressWarnings("unchecked")
     public <R> Page<R> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, Class<R> type) {
-        return queryPage(page, pageSize, jdbc, smartMapper(type));
+        String cacheKey = null;
+        if (cacheOptions != null) {
+            cacheKey = generateCacheKey() + "_page_" + page + "_" + pageSize;
+            try {
+                Object cachedData = cacheOptions.getManager().get(cacheKey, Page.class, false);
+                if (cachedData != null) {
+                    return (Page<R>) cachedData;
+                }
+            } catch (Exception e) {
+                // Ignore cache read error
+            }
+        }
+
+        Page<R> resultPage = queryPage(page, pageSize, jdbc, smartMapper(type));
+
+        if (cacheOptions != null && cacheKey != null) {
+            try {
+                cacheOptions.getManager().put(cacheKey, resultPage, cacheOptions.getTtlSeconds());
+            } catch (Exception e) {
+                // Ignore cache write error
+            }
+        }
+        return resultPage;
     }
 
     /** Execute query and return a single typed value. */

@@ -859,7 +859,64 @@ es.onmessage = (e) => renderRows(JSON.parse(e.data));
 > - `stream()` — O(1): processes 1 row at a time, no buffer  
 > - `streamBatch(batchSize=10)` — O(10): only 10 rows in memory at a time, regardless of total result size
 
-### 18. Auto DTO Mapping
+### 19. Auto Caching (Redis / Caffeine)
+
+ClickHouse queries can be heavy. To protect the database from concurrent dashboard reloads (cache stampede), you can enable **transparent caching** directly in the query builder.
+
+The cache key is **automatically generated** via MD5 hash of the `SQL + parameters`.
+
+**1. Implement `QueryCacheManager` adapter:**
+
+```java
+@Component
+public class RedisQueryCacheManager implements QueryCacheManager {
+    @Autowired private StringRedisTemplate redis;
+    @Autowired private ObjectMapper mapper; // Must support JavaTimeModule
+
+    @Override
+    public <T> Object get(String key, Class<T> returnType, boolean isList) {
+        String json = redis.opsForValue().get(key);
+        if (json == null) return null;
+        try {
+            if (isList) {
+                var listType = mapper.getTypeFactory().constructCollectionType(List.class, returnType);
+                return mapper.readValue(json, listType);
+            }
+            return mapper.readValue(json, returnType);
+        } catch (Exception e) { return null; }
+    }
+
+    @Override
+    public void put(String key, Object data, long ttlSeconds) {
+        try {
+            redis.opsForValue().set(key, mapper.writeValueAsString(data), Duration.ofSeconds(ttlSeconds));
+        } catch (Exception e) { /* log error */ }
+    }
+}
+```
+
+**2. Just add `.cached()` to your query:**
+
+```java
+@Autowired QueryCacheManager redisCache;
+
+public List<Report> getMonthlyRevenue(String tenantId) {
+    return ClickHouseQuery.select(col("date"), sum("revenue"))
+        .from("orders")
+        .where("tenant_id").eq(tenantId)
+        
+        // ✨ MAGIC HAPPENS HERE:
+        // Try Cache -> (Miss) -> Query DB -> Save Cache
+        .cached(redisCache, Duration.ofMinutes(10)) 
+        
+        .groupBy("date")
+        .query(namedJdbc, Report.class);
+}
+```
+
+> The `.cached(...)` modifier works transparently with `.query()`, `.queryOne()`, and `.queryPage()`.
+
+### 20. Auto DTO Mapping
 
 No `RowMapper` needed — just pass your DTO class:
 
