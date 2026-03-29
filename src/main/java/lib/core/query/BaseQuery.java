@@ -16,6 +16,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -719,11 +720,17 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         List<R> results = query(jdbc, smartMapper(type));
 
         if (cacheOptions != null && cacheKey != null) {
-            try {
-                cacheOptions.getManager().put(cacheKey, results, cacheOptions.getTtlSeconds());
-            } catch (Exception e) {
-                // Ignore cache write error
-            }
+            final String finalKey = cacheKey;
+            final List<R> finalResults = results;
+            final CacheOptions opts = cacheOptions;
+            // async write — client gets result immediately, Redis save runs in background
+            CompletableFuture.runAsync(() -> {
+                try {
+                    opts.getManager().put(finalKey, finalResults, opts.getTtlSeconds());
+                } catch (Exception e) {
+                    // Ignore cache write error
+                }
+            });
         }
         return results;
     }
@@ -758,11 +765,17 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         R result = results.isEmpty() ? null : results.get(0);
 
         if (cacheOptions != null && cacheKey != null && result != null) {
-            try {
-                cacheOptions.getManager().put(cacheKey, result, cacheOptions.getTtlSeconds());
-            } catch (Exception e) {
-                // Ignore cache write error
-            }
+            final String finalKey = cacheKey;
+            final R finalResult = result;
+            final CacheOptions opts = cacheOptions;
+            // async write — response not blocked by Redis save
+            CompletableFuture.runAsync(() -> {
+                try {
+                    opts.getManager().put(finalKey, finalResult, opts.getTtlSeconds());
+                } catch (Exception e) {
+                    // Ignore cache write error
+                }
+            });
         }
         return result;
     }
@@ -852,11 +865,17 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         Page<R> resultPage = queryPage(page, pageSize, jdbc, smartMapper(type));
 
         if (cacheOptions != null && cacheKey != null) {
-            try {
-                cacheOptions.getManager().put(cacheKey, resultPage, cacheOptions.getTtlSeconds());
-            } catch (Exception e) {
-                // Ignore cache write error
-            }
+            final String finalKey = cacheKey;
+            final Page<R> finalPage = resultPage;
+            final CacheOptions opts = cacheOptions;
+            // async write — response not blocked by Redis save
+            CompletableFuture.runAsync(() -> {
+                try {
+                    opts.getManager().put(finalKey, finalPage, opts.getTtlSeconds());
+                } catch (Exception e) {
+                    // Ignore cache write error
+                }
+            });
         }
         return resultPage;
     }
