@@ -289,7 +289,7 @@ long distinctSessions = ClickHouseQuery.count(
 ClickHouseInsert.into("order_items")
     .columns("id", "tenant_id", "user_id", "product_id", "action",
              "revenue", "cost", "status", "currency",
-             "tags", "created_at", "session_id")
+             "tags", "created_at", "session_id", "coupon_code")
     .executeBatch(namedJdbc, incomingOrders, tx -> CHParams.of()
         .set("id",           tx.getId())                               // set (any value)
         .set("tenantId",     tx.getTenantId())
@@ -303,11 +303,76 @@ ClickHouseInsert.into("order_items")
         .setArray("tags",    tx.getTags(), String.class)              // List → SQL ARRAY
         .setTimestamp("createdAt", tx.getCreatedAt())                 // Instant → Timestamp
         .set("sessionId",    tx.getSessionId())
+        .setIfNotNull("couponCode", tx.getCouponCode())               // skip if null (dynamic columns only)
         .build()
     );
-```
 
-> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER / LEFT / RIGHT / FULL OUTER), every WHERE operator (eq / ne / gt / gte / lt / lte / in / notIn / isNull / isNotNull / between Instant / between Number / eqIfNotBlank / eqIf / in(subquery) / notIn(subquery) / whereRaw / whereILike / whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators, thenRaw, orElseRaw, end), all 5 aggregates + 5 conditional aggregates (fluent & raw), arithmetic chain (minus / plus / multiply / divide), multi-column `countDistinct`, HAVING + `havingRaw`, multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage` / `queryOne` / terminal `.count()` / subquery count, INSERT batch (`set` / `setOrDefault` / `setEnum` / `setTimestamp` / `setArray`).
+
+// ══════════════════════════════════════════════════════════════════
+// 8. AUTO CACHE (Redis / Caffeine) — check cache before hitting DB
+// ══════════════════════════════════════════════════════════════════
+// First call  (~800ms): cache MISS → query ClickHouse → save to Redis
+// Subsequent  (~2ms):   cache HIT  → return from Redis, no DB call
+// On Redis failure:     silent fallback → query ClickHouse normally
+
+Page<SalesReport> cachedReport = ClickHouseQuery
+    .select(oi.col("tenant_id"), sum("revenue").as("total_revenue"))
+    .from("order_items")
+    .where(oi.col("tenant_id")).eq(tenantId)
+    .where(oi.col("created_at")).between(fromDate, toDate)
+    .groupBy(oi.col("tenant_id"))
+    .orderBy("total_revenue", SortOrder.DESC)
+    // Cache key auto-generated via MD5(SQL + params), TTL = 30 min
+    .cached(redisCacheManager, Duration.ofMinutes(30))
+    .queryPage(page, pageSize, namedJdbc, SalesReport.class);
+
+
+// ══════════════════════════════════════════════════════════════════
+// 9. STREAMING — O(1) memory, pipeline direct to HTTP client
+// ══════════════════════════════════════════════════════════════════
+
+// Style A: stream() → CSV export (memory O(1), 1 row at a time)
+@GetMapping("/export")
+public void exportCsv(HttpServletResponse response) throws IOException {
+    response.setContentType("text/csv");
+    response.setHeader("Content-Disposition", "attachment; filename=export.csv");
+    PrintWriter writer = response.getWriter();
+    writer.println("tenant_id,revenue,created_at");
+
+    ClickHouseQuery.select(oi.col("tenant_id"), oi.col("revenue"), oi.col("created_at"))
+        .from("order_items")
+        .where(oi.col("tenant_id")).eq(tenantId)
+        .stream(namedJdbc, rs -> {
+            writer.println(
+                rs.getString("tenant_id") + "," +
+                rs.getBigDecimal("revenue") + "," +
+                rs.getString("created_at")
+            );
+            // each row flushed to browser over TCP immediately
+        });
+}
+// FE: window.location.href = '/api/export?tenantId=...'
+
+// Style B: streamBatch() → SSE, push N rows at a time (memory O(batchSize))
+@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter streamDashboard() {
+    SseEmitter emitter = new SseEmitter();
+    executor.submit(() -> {
+        ClickHouseQuery.select(oi.col("tenant_id"), sum("revenue").as("total"))
+            .from("order_items")
+            .where(oi.col("tenant_id")).eq(tenantId)
+            .groupBy(oi.col("tenant_id"))
+            .streamBatch(namedJdbc, SalesReport.class, 10, batch -> {
+                emitter.send(batch);   // push List<SalesReport> as JSON
+            });
+        emitter.complete();
+    });
+    return emitter;
+}
+// FE: const es = new EventSource('/api/stream'); es.onmessage = e => render(JSON.parse(e.data));
+
+> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER/LEFT/RIGHT/FULL OUTER), every WHERE operator (eq/ne/gt/gte/lt/lte/in/notIn/isNull/isNotNull/between/eqIfNotBlank/eqIf/in(subquery)/notIn(subquery)/whereRaw/whereILike/whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators, thenRaw, orElseRaw, end), all 5 aggregates + 5 conditional aggregates (fluent & raw), arithmetic chain (minus/plus/multiply/divide), multi-column `countDistinct`, HAVING + `havingRaw`, multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage`/`queryOne`/terminal `.count()`/subquery count, INSERT batch (`set`/`setOrDefault`/`setIfNotNull`/`setEnum`/`setTimestamp`/`setArray`), **Auto Cache** `.cached(manager, Duration)`, **Streaming** `.stream(handler)` + `.streamBatch(type, batchSize, consumer)`.
+
 
 ---
 
