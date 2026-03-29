@@ -39,6 +39,7 @@ Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe
   - [23. GROUP BY Modifiers](#23-group-by-modifiers)
   - [24. INSERT](#24-insert)
 - [Validations & Safety](#validations--safety)
+- [Observability (Logging & Metrics)](#observability-logging--metrics)
 - [Clause-Order Validation](#clause-order-validation)
 - [API Reference](#api-reference)
   - [CH Expressions](#ch-expressions)
@@ -1279,6 +1280,108 @@ ClickHouseInsert.into("orders")
         .setTimestamp("createdAt", o.getCreatedAt())
         .build()
     );
+```
+
+---
+
+## Observability (Logging & Metrics)
+
+The library provides a pluggable **Observer pattern** — no AOP, no Spring dependency in the library core. You configure it once in your Spring Boot app and it fires automatically on every query.
+
+### How It Works
+
+```
+query() → [time start]
+    → cache HIT  → emit(QueryEvent{cache=HIT})  → return
+    → cache MISS → jdbc.query() → emit(QueryEvent{cache=MISS, durationMs=800}) → async cache write → return
+```
+
+### Step 1: Configure `application.yml`
+
+```yaml
+clickhouse-query:
+  logging:
+    enabled: true
+    log-sql: true           # log SQL at DEBUG level
+    log-params: false       # log bind params (may expose PII) — false by default
+    slow-query-ms: 1000     # queries slower than this → logged at WARN
+  metrics:
+    enabled: true           # log cache HIT / MISS at INFO level
+```
+
+### Step 2: Register Observer as a Spring `@Bean`
+
+```java
+@Configuration
+public class ClickHouseObserverConfig {
+
+    @Bean
+    @ConditionalOnProperty(name = "clickhouse-query.logging.enabled", havingValue = "true")
+    public QueryObserver clickHouseQueryObserver(
+            @Value("${clickhouse-query.logging.log-sql:true}")       boolean logSql,
+            @Value("${clickhouse-query.logging.log-params:false}")   boolean logParams,
+            @Value("${clickhouse-query.logging.slow-query-ms:1000}") long slowMs,
+            @Value("${clickhouse-query.metrics.enabled:true}")       boolean metrics) {
+
+        LoggingQueryObserver obs = LoggingQueryObserver.builder()
+            .logSql(logSql)
+            .logParams(logParams)
+            .slowQueryThresholdMs(slowMs)
+            .trackMetrics(metrics)
+            .build();
+
+        QueryObserverRegistry.register(obs);   // ← one-time global registration
+        return obs;
+    }
+}
+```
+
+### Log Output Examples
+
+```
+# Normal query (DEBUG)
+[LIST] 43ms | cache=DISABLED | rows=31 | sql=SELECT date, sum(revenue) AS total FROM orders WHERE ...
+
+# Cache HIT (INFO, trackMetrics=true)
+[Cache HIT]  type=PAGE | 2ms | rows=20
+
+# Cache MISS (INFO, trackMetrics=true)
+[Cache MISS] type=PAGE | 843ms | rows=20 — saved to cache
+
+# Slow query (WARN, threshold exceeded)
+[SLOW QUERY] 2341ms | type=LIST | cache=MISS | rows=10000 | sql=SELECT ...
+[SLOW QUERY params] {tenantId=TENANT_001, fromDate=2026-01-01T00:00:00Z}
+```
+
+### Options Reference
+
+| YAML Key | Default | Description |
+|---|---|---|
+| `logging.enabled` | — | Enable/disable the observer bean entirely (`@ConditionalOnProperty`) |
+| `logging.log-sql` | `true` | Log every SQL at `DEBUG` |
+| `logging.log-params` | `false` | Also log bind parameters (**⚠ may expose PII**) |
+| `logging.slow-query-ms` | `1000` | Queries above threshold → logged at `WARN` |
+| `metrics.enabled` | `true` | Log cache `HIT` / `MISS` at `INFO` |
+
+> **Logger name:** `clickhouse-query` — add `logging.level.clickhouse-query: DEBUG` in YAML to see all query logs.
+
+### Custom Observer
+
+Implement the interface directly for custom metrics pipelines (Micrometer, DataDog, etc.):
+
+```java
+@Component
+public class MicrometerQueryObserver implements QueryObserver {
+    private final MeterRegistry registry;
+
+    @Override
+    public void onQuery(QueryEvent e) {
+        registry.timer("clickhouse.query",
+                "type", e.getQueryType().name(),
+                "cache", e.getCacheStatus().name())
+            .record(Duration.ofMillis(e.getDurationMs()));
+    }
+}
 ```
 
 ---
