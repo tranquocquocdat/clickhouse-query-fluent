@@ -5,52 +5,46 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Built-in {@link QueryObserver} that logs query events via SLF4J
- * with structured, easy-to-read output.
+ * using a structured, visually clear format.
  *
- * <p>
- * Activated automatically via Spring Boot AutoConfiguration when
- * {@code clickhouse-query.logging.enabled=true} is present in
- * {@code application.yml}.
- *
- * <h3>Log format examples</h3>
+ * <h3>Log format</h3>
  * 
  * <pre>
- * INFO  🔍 [CH] LIST  | MISS   |  843ms | rows=20 | page=0/20
- * INFO  ✅ [CH] PAGE  | HIT    |    2ms | rows=20 | page=0/20
- * INFO  💾 [CH] LIST  | MISS   |  843ms | saved to cache (async)
- * DEBUG     sql  : SELECT date, sum(revenue) AS total FROM orders WHERE tenant_id = :tenantId
- * DEBUG     params: {tenantId=TENANT_001, fromDate=2026-01-01}
- * WARN  ⚠️ [CH-SLOW] LIST | MISS | 2341ms | rows=10000
- * WARN     ↳ sql  : SELECT ...
- * WARN     ↳ params: {tenantId=TENANT_001}
+ * ── Normal query (DEBUG / INFO) ──────────────────────────────────────────
+ * ✅  [CH] PAGE  │ HIT      │    2ms │ rows=20 │ page=0/20
+ * 💾  [CH] LIST  │ MISS     │  843ms │ rows=31
+ *    ├─ sql   : SELECT date, sum(revenue) FROM orders WHERE tenant_id = :t
+ *    └─ params: {tenantId=TENANT_001, fromDate=2026-01-01}
+ * 🔍  [CH] ONE   │ DISABLED │   45ms │ rows=1
+ *    └─ sql   : SELECT * FROM orders WHERE id = :id LIMIT 1
+ *
+ * ── Slow query (WARN) ────────────────────────────────────────────────────
+ * ┌─── ⚠️  SLOW QUERY ───────────────────────────────────────────────────
+ *   type    : LIST            cache    : MISS
+ *   duration: 2341ms          rows     : 10000
+ *   sql     : SELECT date, sum(revenue) FROM orders WHERE ...
+ *   params  : {tenantId=TENANT_001, fromDate=2026-01-01}
+ * └──────────────────────────────────────────────────────────────────────
  * </pre>
  */
 public final class LoggingQueryObserver implements QueryObserver {
 
     private static final Logger log = LoggerFactory.getLogger("clickhouse-query");
 
-    // ── ANSI-free visual markers (work in all log viewers) ─────────────────
-    private static final String ICON_QUERY = "🔍";
-    private static final String ICON_HIT = "✅";
-    private static final String ICON_MISS = "💾";
-    private static final String ICON_SLOW = "⚠️ ";
+    // ── Visual markers ─────────────────────────────────────────────────────
     private static final String PREFIX = "[CH]";
+    private static final String ICON_HIT = "✅ ";
+    private static final String ICON_MISS = "💾 ";
+    private static final String ICON_QERY = "🔍 ";
+    private static final String SEP = "│";
+    private static final String BOX_TOP = "┌─── ⚠️  SLOW QUERY ──────────────────────────────────────────────────";
+    private static final String BOX_BOT = "└──────────────────────────────────────────────────────────────────────";
 
     // ── Configuration ──────────────────────────────────────────────────────
 
-    /** Log the SQL of every query at DEBUG level. */
     private final boolean logSql;
-
-    /** Log bind parameters (values) alongside SQL at DEBUG level. */
     private final boolean logParams;
-
-    /**
-     * Queries taking longer than this threshold (ms) are logged at WARN level.
-     * Set to {@code Long.MAX_VALUE} to disable slow-query logging.
-     */
     private final long slowQueryThresholdMs;
-
-    /** Log cache HIT / MISS status at INFO level. */
     private final boolean trackMetrics;
 
     private LoggingQueryObserver(Builder b) {
@@ -64,68 +58,70 @@ public final class LoggingQueryObserver implements QueryObserver {
 
     @Override
     public void onQuery(QueryEvent e) {
-        boolean slow = e.getDurationMs() >= slowQueryThresholdMs;
-
-        // ── Slow-query alert (WARN) — always logged regardless of logSql ──
-        if (slow) {
-            log.warn("{} [CH-SLOW] {:<4} | {:<8} | {}ms | rows={}{}",
-                    ICON_SLOW,
-                    e.getQueryType(),
-                    e.getCacheStatus(),
-                    e.getDurationMs(),
-                    e.getResultCount(),
-                    pageInfo(e));
-            if (e.getSql() != null) {
-                log.warn("     ↳ sql   : {}", e.getSql());
-            }
-            if (logParams && e.getParams() != null) {
-                log.warn("     ↳ params: {}", e.getParams());
-            }
+        if (e.getDurationMs() >= slowQueryThresholdMs) {
+            logSlow(e);
             return;
         }
+        logNormal(e);
+    }
 
-        // ── Cache metrics (INFO) ──
-        if (trackMetrics && log.isInfoEnabled()) {
-            switch (e.getCacheStatus()) {
-                case HIT ->
-                    log.info("{} {} {:<5} | {:<8} | {:>5}ms | rows={}{}",
-                            ICON_HIT, PREFIX,
-                            e.getQueryType(), e.getCacheStatus(),
-                            e.getDurationMs(), e.getResultCount(),
-                            pageInfo(e));
-                case MISS ->
-                    log.info("{} {} {:<5} | {:<8} | {:>5}ms | rows={}{} — saved to cache (async)",
-                            ICON_MISS, PREFIX,
-                            e.getQueryType(), e.getCacheStatus(),
-                            e.getDurationMs(), e.getResultCount(),
-                            pageInfo(e));
-                case DISABLED -> {
-                    if (logSql && log.isDebugEnabled()) {
-                        log.debug("{} {} {:<5} | {:<8} | {:>5}ms | rows={}{}",
-                                ICON_QUERY, PREFIX,
-                                e.getQueryType(), e.getCacheStatus(),
-                                e.getDurationMs(), e.getResultCount(),
-                                pageInfo(e));
-                    }
-                }
-            }
+    // ── Slow query — box style (WARN) ──────────────────────────────────────
+
+    private void logSlow(QueryEvent e) {
+        log.warn(BOX_TOP);
+        log.warn("  type    : {:<12}  cache    : {}", e.getQueryType(), e.getCacheStatus());
+        log.warn("  duration: {}ms{}          rows     : {}", e.getDurationMs(), padding(e.getDurationMs()),
+                e.getResultCount());
+        if (e.getPage() >= 0) {
+            log.warn("  page    : {}/{}", e.getPage(), e.getPageSize());
+        }
+        if (e.getSql() != null) {
+            log.warn("  sql     : {}", e.getSql());
+        }
+        if (logParams && e.getParams() != null) {
+            log.warn("  params  : {}", e.getParams());
+        }
+        log.warn(BOX_BOT);
+    }
+
+    // ── Normal query — single-line + tree detail (INFO / DEBUG) ───────────
+
+    private void logNormal(QueryEvent e) {
+        String icon;
+        boolean isHit = e.getCacheStatus() == CacheStatus.HIT;
+        boolean isMiss = e.getCacheStatus() == CacheStatus.MISS;
+
+        if (isHit)
+            icon = ICON_HIT;
+        else if (isMiss)
+            icon = ICON_MISS;
+        else
+            icon = ICON_QERY;
+
+        // ── Main line ──
+        String mainLine = String.format("%s %s %-5s %s %-8s %s %5dms %s rows=%d%s",
+                icon, PREFIX,
+                e.getQueryType(), SEP,
+                e.getCacheStatus(), SEP,
+                e.getDurationMs(), SEP,
+                e.getResultCount(),
+                pageInfo(e));
+
+        String cacheSuffix = isMiss ? " — saved to cache (async)" : "";
+
+        if (trackMetrics && (isHit || isMiss)) {
+            log.info("{}{}", mainLine, cacheSuffix);
         } else if (logSql && log.isDebugEnabled()) {
-            // metrics disabled — still log at DEBUG when logSql=true
-            log.debug("{} {} {:<5} | {:<8} | {:>5}ms | rows={}{}",
-                    ICON_QUERY, PREFIX,
-                    e.getQueryType(), e.getCacheStatus(),
-                    e.getDurationMs(), e.getResultCount(),
-                    pageInfo(e));
+            log.debug("{}{}", mainLine, cacheSuffix);
         }
 
-        // ── SQL + params detail (DEBUG) — only on MISS or DISABLED (not HIT, no DB
-        // call) ──
-        if (logSql && log.isDebugEnabled()
-                && e.getCacheStatus() != CacheStatus.HIT
-                && e.getSql() != null) {
-            log.debug("     sql   : {}", e.getSql());
+        // ── SQL + params — only when DB was queried (not HIT) ──
+        if (!isHit && logSql && log.isDebugEnabled() && e.getSql() != null) {
             if (logParams && e.getParams() != null) {
-                log.debug("     params: {}", e.getParams());
+                log.debug("   ├─ sql   : {}", e.getSql());
+                log.debug("   └─ params: {}", e.getParams());
+            } else {
+                log.debug("   └─ sql   : {}", e.getSql());
             }
         }
     }
@@ -134,8 +130,21 @@ public final class LoggingQueryObserver implements QueryObserver {
 
     private static String pageInfo(QueryEvent e) {
         return e.getPage() >= 0
-                ? String.format(" | page=%d/%d", e.getPage(), e.getPageSize())
+                ? String.format(" %s page=%d/%d", SEP, e.getPage(), e.getPageSize())
                 : "";
+    }
+
+    /** pads short durations so the "rows" column aligns better */
+    private static String padding(long ms) {
+        if (ms < 10)
+            return "    ";
+        if (ms < 100)
+            return "   ";
+        if (ms < 1000)
+            return "  ";
+        if (ms < 10000)
+            return " ";
+        return "";
     }
 
     // ── Builder ────────────────────────────────────────────────────────────
@@ -162,7 +171,7 @@ public final class LoggingQueryObserver implements QueryObserver {
             return this;
         }
 
-        /** Queries above this threshold → logged at WARN. Default: 1000ms. */
+        /** Queries above this threshold → WARN box. Default: 1000ms. */
         public Builder slowQueryThresholdMs(long ms) {
             this.slowQueryThresholdMs = ms;
             return this;
