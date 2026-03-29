@@ -1,6 +1,6 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -9,7 +9,7 @@ import java.util.StringJoiner;
 
 /**
  * Fluent builder for OR-grouped WHERE conditions.
- * Created via {@link ClickHouseQuery#whereOr(java.util.function.Consumer)}.
+ * Created via {@link BaseQuery#whereOr(java.util.function.Consumer)}.
  *
  * <pre>{@code
  * .whereOr(or -> or
@@ -21,12 +21,12 @@ import java.util.StringJoiner;
  * // → (status = :_or0 OR status = :_or1 OR amount > :_or2 OR type IN (:_or3, :_or4))
  * }</pre>
  */
-public final class OrBuilder {
-    private final ClickHouseQuery query;
+public final class OrBuilder<T extends BaseQuery<T>> {
+    private final T query;
     private final List<String> conditions = new ArrayList<>();
     private int seq = 0;
 
-    public OrBuilder(ClickHouseQuery query) {
+    public OrBuilder(T query) {
         this.query = query;
     }
 
@@ -48,19 +48,19 @@ public final class OrBuilder {
      * @param column the column name
      * @return an {@link OrCondition} for specifying the operator
      */
-    public OrCondition where(String column) {
-        return new OrCondition(this, column);
+    public OrCondition<T> where(String column) {
+        return new OrCondition<>(this, column);
     }
 
     /** Start a fluent OR condition on a column (Expr overload). */
-    public OrCondition where(lib.core.clickhouse.expression.CH.Expr column) {
-        return new OrCondition(this, column.toString());
+    public OrCondition<T> where(lib.core.query.expression.CommonFunctions.Expr column) {
+        return new OrCondition<>(this, column.toString());
     }
 
     // ── Legacy API (still works) ────────────────────────────────────────
 
     /** {@code column = value} (shorthand, legacy) */
-    public OrBuilder addEq(String column, Object value) {
+    public OrBuilder<T> addEq(String column, Object value) {
         String p = nextParam();
         conditions.add(column + " = :" + p);
         query.params.addValue(p, value);
@@ -68,14 +68,14 @@ public final class OrBuilder {
     }
 
     /** Raw condition with param. */
-    public OrBuilder addRaw(String condition, String paramName, Object value) {
+    public OrBuilder<T> addRaw(String condition, String paramName, Object value) {
         conditions.add(condition);
         query.params.addValue(paramName, value);
         return this;
     }
 
     /** Raw condition without param. */
-    public OrBuilder addRaw(String condition) {
+    public OrBuilder<T> addRaw(String condition) {
         conditions.add(condition);
         return this;
     }
@@ -90,8 +90,8 @@ public final class OrBuilder {
      * // → (status = :_or0 OR session_id ILIKE :_or1 OR user_id ILIKE :_or2 OR order_id ILIKE :_or3)
      * }</pre>
      */
-    public OrILikeBuilder whereILike(String keyword) {
-        return new OrILikeBuilder(this, keyword);
+    public OrILikeBuilder<T> whereILike(String keyword) {
+        return new OrILikeBuilder<>(this, keyword);
     }
 
     /** Apply all conditions as a single OR group to the parent query's WHERE. */
@@ -102,17 +102,17 @@ public final class OrBuilder {
     }
 
     /** Inner builder for ILIKE on multiple columns inside OR group. */
-    public static final class OrILikeBuilder {
-        private final OrBuilder or;
+    public static final class OrILikeBuilder<T extends BaseQuery<T>> {
+        private final OrBuilder<T> or;
         private final String keyword;
 
-        OrILikeBuilder(OrBuilder or, String keyword) {
+        OrILikeBuilder(OrBuilder<T> or, String keyword) {
             this.or = or;
             this.keyword = keyword;
         }
 
         /** Specify columns to search with ILIKE. Skipped when keyword is null/blank. */
-        public OrBuilder on(String... columns) {
+        public OrBuilder<T> on(String... columns) {
             if (keyword == null || keyword.isBlank()) return or;
             String trimmed = keyword.trim();
             for (String col : columns) {
@@ -124,7 +124,7 @@ public final class OrBuilder {
         }
 
         /** Specify columns to search with ILIKE (Expr/Object overload). */
-        public OrBuilder on(Object... columns) {
+        public OrBuilder<T> on(Object... columns) {
             if (keyword == null || keyword.isBlank()) return or;
             String trimmed = keyword.trim();
             for (Object col : columns) {
@@ -142,17 +142,17 @@ public final class OrBuilder {
      * Intermediate builder for specifying the operator on a column inside OR.
      * Supports all operators from {@link WhereBuilder}: eq, ne, gt, gte, lt, lte, in, isNull, etc.
      */
-    public static final class OrCondition {
-        private final OrBuilder or;
+    public static final class OrCondition<T extends BaseQuery<T>> {
+        private final OrBuilder<T> or;
         private final String column;
 
-        OrCondition(OrBuilder or, String column) {
+        OrCondition(OrBuilder<T> or, String column) {
             this.or = or;
             this.column = column;
         }
 
         /** {@code column = value} — skipped when value is null. */
-        public OrBuilder eq(Object value) {
+        public OrBuilder<T> eq(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " = :" + p);
@@ -161,7 +161,7 @@ public final class OrBuilder {
         }
 
         /** {@code column != value} — skipped when value is null. */
-        public OrBuilder ne(Object value) {
+        public OrBuilder<T> ne(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " != :" + p);
@@ -170,7 +170,7 @@ public final class OrBuilder {
         }
 
         /** {@code column > value} — skipped when value is null. */
-        public OrBuilder gt(Object value) {
+        public OrBuilder<T> gt(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " > :" + p);
@@ -179,7 +179,7 @@ public final class OrBuilder {
         }
 
         /** {@code column >= value} — skipped when value is null. */
-        public OrBuilder gte(Object value) {
+        public OrBuilder<T> gte(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " >= :" + p);
@@ -188,7 +188,7 @@ public final class OrBuilder {
         }
 
         /** {@code column < value} — skipped when value is null. */
-        public OrBuilder lt(Object value) {
+        public OrBuilder<T> lt(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " < :" + p);
@@ -197,7 +197,7 @@ public final class OrBuilder {
         }
 
         /** {@code column <= value} — skipped when value is null. */
-        public OrBuilder lte(Object value) {
+        public OrBuilder<T> lte(Object value) {
             if (value == null) return or;
             String p = or.nextParam();
             or.conditions.add(column + " <= :" + p);
@@ -206,10 +206,10 @@ public final class OrBuilder {
         }
 
         /** {@code column IN (v1, v2, ...)} — skipped when values is null or empty. */
-        public <T> OrBuilder in(Collection<T> values) {
+        public <V> OrBuilder<T> in(Collection<V> values) {
             if (values == null || values.isEmpty()) return or;
             StringJoiner joiner = new StringJoiner(", ");
-            for (T val : values) {
+            for (V val : values) {
                 String p = or.nextParam();
                 joiner.add(":" + p);
                 or.query.params.addValue(p, val);
@@ -219,10 +219,10 @@ public final class OrBuilder {
         }
 
         /** {@code column NOT IN (v1, v2, ...)} — skipped when values is null or empty. */
-        public <T> OrBuilder notIn(Collection<T> values) {
+        public <V> OrBuilder<T> notIn(Collection<V> values) {
             if (values == null || values.isEmpty()) return or;
             StringJoiner joiner = new StringJoiner(", ");
-            for (T val : values) {
+            for (V val : values) {
                 String p = or.nextParam();
                 joiner.add(":" + p);
                 or.query.params.addValue(p, val);
@@ -232,13 +232,13 @@ public final class OrBuilder {
         }
 
         /** {@code column IS NULL} */
-        public OrBuilder isNull() {
+        public OrBuilder<T> isNull() {
             or.conditions.add(column + " IS NULL");
             return or;
         }
 
         /** {@code column IS NOT NULL} */
-        public OrBuilder isNotNull() {
+        public OrBuilder<T> isNotNull() {
             or.conditions.add(column + " IS NOT NULL");
             return or;
         }
@@ -247,7 +247,7 @@ public final class OrBuilder {
          * {@code column >= from AND column <= to} — skipped when both are null.
          * If only one bound is null, generates a one-sided condition.
          */
-        public OrBuilder between(java.time.Instant from, java.time.Instant to) {
+        public OrBuilder<T> between(java.time.Instant from, java.time.Instant to) {
             if (from == null && to == null) return or;
             if (from != null && to != null) {
                 String pFrom = or.nextParam();
@@ -268,7 +268,7 @@ public final class OrBuilder {
         }
 
         /** {@code column ILIKE :param} — skipped when value is null or blank. */
-        public OrBuilder ilike(String value) {
+        public OrBuilder<T> ilike(String value) {
             if (value == null || value.isBlank()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " ILIKE :" + p);
@@ -277,7 +277,7 @@ public final class OrBuilder {
         }
 
         /** {@code column LIKE :param} — skipped when value is null or blank. */
-        public OrBuilder like(String value) {
+        public OrBuilder<T> like(String value) {
             if (value == null || value.isBlank()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " LIKE :" + p);
@@ -286,7 +286,7 @@ public final class OrBuilder {
         }
 
         /** {@code column IN (subquery)} */
-        public OrBuilder in(ClickHouseQuery subQuery) {
+        public OrBuilder<T> in(T subQuery) {
             or.conditions.add(column + " IN (" + subQuery.toSql() + ")");
             subQuery.params.getValues().forEach((k, v) -> or.query.params.addValue((String) k, v));
             return or;

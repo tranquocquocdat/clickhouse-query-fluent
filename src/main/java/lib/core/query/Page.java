@@ -1,4 +1,4 @@
-package lib.core.clickhouse.query;
+package lib.core.query;
 
 import java.util.List;
 

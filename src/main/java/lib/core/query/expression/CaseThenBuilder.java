@@ -1,4 +1,4 @@
-package lib.core.clickhouse.expression;
+package lib.core.query.expression;
 
 /**
  * After specifying the WHEN condition, specify the THEN value.

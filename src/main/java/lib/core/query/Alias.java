@@ -1,7 +1,7 @@
-package lib.core.clickhouse.query;
+package lib.core.query;
 
 import lib.core.clickhouse.expression.AggIfBuilder;
-import lib.core.clickhouse.expression.CaseConditionBuilder;
+import lib.core.query.expression.CaseConditionBuilder;
 import lib.core.clickhouse.expression.CH;
 
 /**

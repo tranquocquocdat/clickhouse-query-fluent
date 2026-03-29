@@ -1,10 +1,10 @@
-package lib.core.clickhouse.expression;
+package lib.core.query.expression;
 
 /**
  * Fluent condition builder for CASE WHEN.
  * Supports: eq, ne, gt, gte, lt, lte, in, isNull, isNotNull, between, raw.
  *
- * @see CH#caseWhen(String)
+ * @see CommonFunctions#caseWhen(String)
  * @see CaseBuilder
  * @see CaseThenBuilder
  */
@@ -19,32 +19,32 @@ public final class CaseConditionBuilder {
 
     /** {@code column = value} */
     public CaseThenBuilder eq(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " = " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " = " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column != value} */
     public CaseThenBuilder ne(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " != " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " != " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column > value} */
     public CaseThenBuilder gt(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " > " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " > " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column >= value} */
     public CaseThenBuilder gte(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " >= " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " >= " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column < value} */
     public CaseThenBuilder lt(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " < " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " < " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column <= value} */
     public CaseThenBuilder lte(Object value) {
-        return new CaseThenBuilder(caseBuilder, column + " <= " + CH.renderValue(value));
+        return new CaseThenBuilder(caseBuilder, column + " <= " + CommonFunctions.renderValue(value));
     }
 
     /** {@code column IN ('v1','v2',...)} */
@@ -78,7 +78,7 @@ public final class CaseConditionBuilder {
      */
     public CaseThenBuilder between(Object from, Object to) {
         return new CaseThenBuilder(caseBuilder,
-                column + " BETWEEN " + CH.renderValue(from) + " AND " + CH.renderValue(to));
+                column + " BETWEEN " + CommonFunctions.renderValue(from) + " AND " + CommonFunctions.renderValue(to));
     }
 
     /** Raw condition: {@code WHEN raw_condition THEN ...} */

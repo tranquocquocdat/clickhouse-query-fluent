@@ -1,13 +1,13 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Builder for WITH (Common Table Expressions).
- * Created via {@link ClickHouseQuery#with(String, ClickHouseQuery)}.
+ * Created via static factory methods in query classes.
  *
  * <pre>{@code
  * ClickHouseQuery
@@ -21,11 +21,23 @@ import java.util.List;
  *     .join("user_orders uo").on("uo.user_id", "au.user_id")
  * }</pre>
  */
-public final class CTEBuilder {
+public final class CTEBuilder<T extends BaseQuery<T>> {
     private final List<String[]> ctes = new ArrayList<>();
-    private final List<ClickHouseQuery> cteQueries = new ArrayList<>();
+    private final List<BaseQuery<?>> cteQueries = new ArrayList<>();
+    private final QueryFactory<T> factory;
 
-    public CTEBuilder() {}
+    /**
+     * Interface for creating new query instances.
+     * Implemented by query classes to provide their specific factory methods.
+     */
+    public interface QueryFactory<T extends BaseQuery<T>> {
+        T select(String... columns);
+        T selectDistinct(String... columns);
+    }
+
+    public CTEBuilder(QueryFactory<T> factory) {
+        this.factory = factory;
+    }
 
     /**
      * Add a CTE definition.
@@ -33,7 +45,7 @@ public final class CTEBuilder {
      * @param name  the CTE name
      * @param query the CTE query
      */
-    public void addCTE(String name, ClickHouseQuery query) {
+    public void addCTE(String name, BaseQuery<?> query) {
         ctes.add(new String[]{name, query.toSql()});
         cteQueries.add(query);
     }
@@ -45,7 +57,7 @@ public final class CTEBuilder {
      * @param query the CTE query
      * @return this builder for chaining
      */
-    public CTEBuilder with(String name, ClickHouseQuery query) {
+    public CTEBuilder<T> with(String name, BaseQuery<?> query) {
         addCTE(name, query);
         return this;
     }
@@ -54,13 +66,13 @@ public final class CTEBuilder {
      * Start the main SELECT clause after defining CTEs.
      *
      * @param columns columns/expressions to select
-     * @return a new {@link ClickHouseQuery} with the CTEs attached
+     * @return a new query with the CTEs attached
      */
-    public ClickHouseQuery select(String... columns) {
-        ClickHouseQuery q = ClickHouseQuery.select(columns);
+    public T select(String... columns) {
+        T q = factory.select(columns);
         q.cteList.addAll(ctes);
         // Merge CTE params into main query
-        for (ClickHouseQuery cteQuery : cteQueries) {
+        for (BaseQuery<?> cteQuery : cteQueries) {
             cteQuery.params.getValues().forEach((k, v) -> q.params.addValue((String) k, v));
         }
         return q;
@@ -70,12 +82,12 @@ public final class CTEBuilder {
      * Start a SELECT DISTINCT after defining CTEs.
      *
      * @param columns columns to select
-     * @return a new {@link ClickHouseQuery} with the CTEs attached
+     * @return a new query with the CTEs attached
      */
-    public ClickHouseQuery selectDistinct(String... columns) {
-        ClickHouseQuery q = ClickHouseQuery.selectDistinct(columns);
+    public T selectDistinct(String... columns) {
+        T q = factory.selectDistinct(columns);
         q.cteList.addAll(ctes);
-        for (ClickHouseQuery cteQuery : cteQueries) {
+        for (BaseQuery<?> cteQuery : cteQueries) {
             cteQuery.params.getValues().forEach((k, v) -> q.params.addValue((String) k, v));
         }
         return q;

@@ -1,6 +1,6 @@
-package lib.core.clickhouse.expression;
+package lib.core.query.expression;
 
-import lib.core.clickhouse.query.SortOrder;
+import lib.core.query.SortOrder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,22 +10,22 @@ import java.util.List;
  *
  * <pre>{@code
  * // Full window: row_number() OVER(PARTITION BY user_id ORDER BY created_at DESC)
- * CH.rowNumber().over().partitionBy("user_id").orderBy("created_at", SortOrder.DESC).as("rank")
+ * CommonFunctions.rowNumber().over().partitionBy("user_id").orderBy("created_at", SortOrder.DESC).as("rank")
  *
  * // Running total per game
- * CH.sum("amount").over().partitionBy("game_id").orderBy("created_at").as("running_total")
+ * CommonFunctions.sum("amount").over().partitionBy("game_id").orderBy("created_at").as("running_total")
  *
  * // No partition — whole result set
- * CH.rowNumber().over().orderBy("amount", SortOrder.DESC).as("rank")
+ * CommonFunctions.rowNumber().over().orderBy("amount", SortOrder.DESC).as("rank")
  *
  * // Alias-aware
  * Alias o = Alias.of("orders").as("o");
  * o.sum("amount").over().partitionBy(o.col("user_id")).orderBy(o.col("created_at")).as("running_total")
  * }</pre>
  *
- * @see CH#rowNumber()
- * @see CH#rank()
- * @see CH#denseRank()
+ * @see CommonFunctions#rowNumber()
+ * @see CommonFunctions#rank()
+ * @see CommonFunctions#denseRank()
  */
 public final class WindowBuilder {
     private final String expression;
@@ -79,15 +79,15 @@ public final class WindowBuilder {
     // ── Terminal ──────────────────────────────────────────────────────
 
     /**
-     * Build the complete window expression and return as {@link CH.Expr}.
+     * Build the complete window expression and return as {@link CommonFunctions.Expr}.
      * Alias can be added by chaining {@code .as("alias")}.
      *
      * <pre>{@code
-     * CH.rowNumber().over().partitionBy("user_id").orderBy("created_at").build()
+     * CommonFunctions.rowNumber().over().partitionBy("user_id").orderBy("created_at").build()
      * // → row_number() OVER(PARTITION BY user_id ORDER BY created_at ASC)
      * }</pre>
      */
-    public CH.Expr build() {
+    public CommonFunctions.Expr build() {
         StringBuilder sb = new StringBuilder(expression).append(" OVER(");
         if (!partitionCols.isEmpty()) {
             sb.append("PARTITION BY ").append(String.join(", ", partitionCols));
@@ -97,14 +97,14 @@ public final class WindowBuilder {
             sb.append("ORDER BY ").append(String.join(", ", orderCols));
         }
         sb.append(")");
-        return new CH.Expr(sb.toString());
+        return new CommonFunctions.Expr(sb.toString());
     }
 
     /**
      * Shorthand: build and add alias.
      * {@code .as("rank")} is equivalent to {@code .build().as("rank")}.
      */
-    public CH.Expr as(String alias) {
+    public CommonFunctions.Expr as(String alias) {
         return build().as(alias);
     }
 

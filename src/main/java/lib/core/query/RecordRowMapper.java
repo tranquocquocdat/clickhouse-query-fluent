@@ -1,4 +1,4 @@
-package lib.core.clickhouse.query;
+package lib.core.query;
 
 import lib.core.clickhouse.util.CHStringUtils;
 import org.springframework.jdbc.core.RowMapper;

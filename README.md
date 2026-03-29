@@ -1033,6 +1033,158 @@ ClickHouseInsert.into("orders")
 
 ---
 
+## Validations & Safety
+
+The library includes comprehensive validations to ensure SQL correctness and prevent common errors.
+
+### 1. SQL Clause Ordering (Phase Validation)
+
+Enforces correct SQL clause order at runtime:
+
+```
+SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT
+```
+
+```java
+// ✅ Valid order
+ClickHouseQuery.select("*")
+    .from("orders")
+    .where("status").eq("ACTIVE")
+    .groupBy("user_id")
+    .having(sum("amount")).gt(100)
+    .orderBy("created_at")
+    .limit(10);
+
+// ❌ Invalid - throws IllegalStateException
+ClickHouseQuery.select("*")
+    .where("status").eq("ACTIVE")  // WHERE before FROM!
+    .from("orders");
+// Exception: Cannot call FROM after WHERE. 
+// Expected order: SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT
+```
+
+**Rules:**
+- Same phase can be called multiple times (e.g., multiple `.where()`)
+- Phases can be skipped (e.g., `SELECT → FROM → LIMIT`)
+- Cannot go backward (throws `IllegalStateException`)
+
+### 2. Null & Empty Value Safety
+
+All WHERE and HAVING operators automatically skip when value is `null` or empty:
+
+```java
+String status = null;
+Integer amount = null;
+List<Integer> ids = List.of();  // empty
+
+ClickHouseQuery.select("*")
+    .from("orders")
+    .where("status").eq(status)      // ✅ Skipped (null)
+    .where("amount").gt(amount)      // ✅ Skipped (null)
+    .where("product_id").in(ids)     // ✅ Skipped (empty)
+    .where("tenant_id").eq("op-1")   // ✅ Applied
+    .toSql();
+// → SELECT * FROM orders WHERE tenant_id = :tenantId
+```
+
+**Null-safe operators:**
+- `eq()`, `ne()`, `gt()`, `gte()`, `lt()`, `lte()` - skip if null or empty string
+- `in()`, `notIn()` - skip if collection is null or empty
+- `between()` - only applies non-null, non-empty bounds
+- `whereILike()`, `whereLike()` - skip if keyword is null or blank
+
+**Special methods:**
+```java
+// eqIfNotBlank - only applies if string is not null and not blank
+query.where("status").eqIfNotBlank("  ");  // ✅ Skipped (blank)
+
+// eqIf - only applies if condition is true
+query.where("role").eqIf(false, "ADMIN");  // ✅ Skipped (condition false)
+```
+
+### 3. Range Validation (between)
+
+Validates that `from <= to`, throws `InvalidRangeException` if invalid:
+
+```java
+// ✅ Valid ranges
+query.where("amount").between(100, 200);
+query.where("created_at").between(
+    Instant.parse("2024-01-01T00:00:00Z"),
+    Instant.parse("2024-12-31T00:00:00Z")
+);
+
+// ❌ Invalid - throws InvalidRangeException
+query.where("amount").between(200, 100);
+// Exception: Invalid range for column 'amount': 
+// from (200) must be less than or equal to to (100)
+
+// ✅ Null bounds skip validation
+query.where("amount").between(null, 200);  // Only applies upper bound
+query.where("amount").between(100, null);  // Only applies lower bound
+
+// ✅ Equal bounds are valid (inclusive range)
+query.where("amount").between(100, 100);
+```
+
+**Supported types:**
+- `Instant` (dates)
+- `Number` (Integer, Long, BigDecimal, etc.)
+- `String` (alphabetical comparison)
+- Any `Comparable` type
+
+**Exception handling:**
+```java
+try {
+    query.where("amount").between(maxAmount, minAmount);
+} catch (InvalidRangeException ex) {
+    System.out.println(ex.getColumn());   // "amount"
+    System.out.println(ex.getFrom());     // 200
+    System.out.println(ex.getTo());       // 100
+    System.out.println(ex.getMessage());  // Full error message
+}
+```
+
+### 4. Best Practices
+
+**✅ DO:**
+```java
+// Check nulls explicitly when needed
+String status = getStatus();
+if (status != null && !status.isEmpty()) {
+    query.where("status").eq(status);
+}
+
+// Or use conditional methods
+query.where("status").eqIfNotBlank(getStatus());
+
+// Validate ranges before between()
+if (minAmount <= maxAmount) {
+    query.where("amount").between(minAmount, maxAmount);
+}
+
+// Use type-safe Alias for JOINs
+Alias orders = Alias.of("orders").as("o");
+Alias users = Alias.of("users").as("u");
+query.where(orders.col("status")).eq("ACTIVE");
+```
+
+**❌ DON'T:**
+```java
+// Don't rely solely on null-safety for business logic
+query.where("status").eq(possiblyNull);  // Works, but unclear intent
+
+// Don't ignore range validation
+query.where("amount").between(from, to);  // May throw if from > to
+
+// Don't use string literals in JOINs
+query.where("status").eq("ACTIVE");  // Ambiguous if multiple tables
+```
+
+For complete validation documentation, see [docs/VALIDATION_GUIDE.md](docs/VALIDATION_GUIDE.md).
+
+---
+
 ## Clause-Order Validation
 
 The builder enforces SQL clause ordering at runtime (including subqueries):

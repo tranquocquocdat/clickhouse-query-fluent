@@ -1,7 +1,8 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
-import lib.core.clickhouse.query.SortOrder;
+import lib.core.query.BaseQuery;
+import lib.core.query.SortOrder;
+import lib.core.query.Alias;
 
 /**
  * Fluent builder for chaining additional JOIN ON conditions via {@code .and()}.
@@ -11,11 +12,11 @@ import lib.core.clickhouse.query.SortOrder;
  *          .and(o.col("order_id"), wt.col("transaction_id"))
  * }</pre>
  */
-public final class JoinOnBuilder {
-    private final ClickHouseQuery query;
+public final class JoinOnBuilder<T extends BaseQuery<T>> {
+    private final T query;
     private final int joinIndex;
 
-    public JoinOnBuilder(ClickHouseQuery query, int joinIndex) {
+    public JoinOnBuilder(T query, int joinIndex) {
         this.query = query;
         this.joinIndex = joinIndex;
     }
@@ -24,56 +25,56 @@ public final class JoinOnBuilder {
      * Append an additional equality condition to the JOIN ON clause.
      * {@code AND leftCol = rightCol}
      */
-    public JoinOnBuilder and(String leftColumn, String rightColumn) {
+    public JoinOnBuilder<T> and(String leftColumn, String rightColumn) {
         String existing = query.joinClauses.get(joinIndex);
         query.joinClauses.set(joinIndex, existing + " AND " + leftColumn + " = " + rightColumn);
         return this;
     }
 
-    // ── Transition methods (delegate to ClickHouseQuery) ────────────────
+    // ── Transition methods (delegate to BaseQuery) ────────────────
 
     /** Continue to WHERE phase. */
-    public WhereBuilder where(String column) {
+    public WhereBuilder<T> where(String column) {
         return query.where(column);
     }
 
     /** Continue to ILIKE search phase. */
-    public WhereILikeBuilder whereILike(String keyword) {
+    public WhereILikeBuilder<T> whereILike(String keyword) {
         return query.whereILike(keyword);
     }
 
     /** Continue to OR-grouped WHERE phase. */
-    public ClickHouseQuery whereOr(java.util.function.Consumer<OrBuilder> consumer) {
+    public T whereOr(java.util.function.Consumer<OrBuilder<T>> consumer) {
         return query.whereOr(consumer);
     }
 
     /** Continue to LIKE search phase. */
-    public WhereILikeBuilder whereLike(String keyword) {
+    public WhereILikeBuilder<T> whereLike(String keyword) {
         return query.whereLike(keyword);
     }
 
     /** Continue to GROUP BY phase. */
-    public ClickHouseQuery groupBy(String... columns) {
+    public T groupBy(String... columns) {
         return query.groupBy(columns);
     }
 
     /** Continue to ORDER BY phase. */
-    public ClickHouseQuery orderBy(String column, SortOrder order) {
+    public T orderBy(String column, SortOrder order) {
         return query.orderBy(column, order);
     }
 
     /** Continue to ORDER BY phase (Expr overload). */
-    public ClickHouseQuery orderBy(Object column, SortOrder order) {
+    public T orderBy(Object column, SortOrder order) {
         return query.orderBy(column.toString(), order);
     }
 
     /** Continue to LIMIT phase. */
-    public ClickHouseQuery limit(int n) {
+    public T limit(int n) {
         return query.limit(n);
     }
 
     /** Get the underlying query (e.g. for passing as a parameter). */
-    public ClickHouseQuery query() {
+    public T query() {
         return query;
     }
 
@@ -83,45 +84,45 @@ public final class JoinOnBuilder {
     }
 
     /** Continue to another INNER JOIN. */
-    public JoinBuilder join(String table) {
+    public JoinBuilder<T> join(String table) {
         return query.join(table);
     }
 
     /** Continue to another INNER JOIN (Alias). */
-    public JoinBuilder join(lib.core.clickhouse.query.Alias alias) {
+    public JoinBuilder<T> join(Alias alias) {
         return query.join(alias);
     }
 
     /** Continue to another LEFT JOIN. */
-    public JoinBuilder leftJoin(String table) {
+    public JoinBuilder<T> leftJoin(String table) {
         return query.leftJoin(table);
     }
 
     /** Continue to another LEFT JOIN (Alias). */
-    public JoinBuilder leftJoin(lib.core.clickhouse.query.Alias alias) {
+    public JoinBuilder<T> leftJoin(Alias alias) {
         return query.leftJoin(alias);
     }
 
     /** Continue to another RIGHT JOIN. */
-    public JoinBuilder rightJoin(String table) {
+    public JoinBuilder<T> rightJoin(String table) {
         return query.rightJoin(table);
     }
 
     /** Continue to another RIGHT JOIN (Alias). */
-    public JoinBuilder rightJoin(lib.core.clickhouse.query.Alias alias) {
+    public JoinBuilder<T> rightJoin(Alias alias) {
         return query.rightJoin(alias);
     }
 
     /** Expr-accepting overloads */
-    public JoinOnBuilder and(lib.core.clickhouse.expression.CH.Expr left, lib.core.clickhouse.expression.CH.Expr right) {
+    public JoinOnBuilder<T> and(lib.core.query.expression.CommonFunctions.Expr left, lib.core.query.expression.CommonFunctions.Expr right) {
         return and(left.toString(), right.toString());
     }
 
-    public WhereBuilder where(lib.core.clickhouse.expression.CH.Expr column) {
+    public WhereBuilder<T> where(lib.core.query.expression.CommonFunctions.Expr column) {
         return query.where(column.toString());
     }
 
-    public ClickHouseQuery groupBy(Object... columns) {
+    public T groupBy(Object... columns) {
         String[] strs = new String[columns.length];
         for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
         return query.groupBy(strs);

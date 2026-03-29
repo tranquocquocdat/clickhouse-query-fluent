@@ -1,16 +1,16 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 /**
  * Holder for a {@code SELECT COUNT(*) FROM (subquery)} pattern.
- * Created via {@link ClickHouseQuery#count(ClickHouseQuery)}.
+ * Created via static factory methods in query classes.
  */
-public final class CountQuery {
-    private final ClickHouseQuery subQuery;
+public final class CountQuery<T extends BaseQuery<T>> {
+    private final T subQuery;
 
-    public CountQuery(ClickHouseQuery subQuery) {
+    public CountQuery(T subQuery) {
         this.subQuery = subQuery;
     }
 

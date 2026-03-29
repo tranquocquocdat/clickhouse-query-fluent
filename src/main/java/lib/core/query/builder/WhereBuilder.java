@@ -1,6 +1,7 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
+import lib.core.query.exception.InvalidRangeException;
 import lib.core.clickhouse.util.ClickHouseDateUtil;
 
 import java.time.Instant;
@@ -9,30 +10,33 @@ import java.util.StringJoiner;
 
 /**
  * Fluent builder for WHERE conditions on a specific column.
- * Created via {@link ClickHouseQuery#where(String)}.
+ * Created via {@link BaseQuery#where(String)}.
+ * 
+ * @param <T> the concrete query type
  */
-public final class WhereBuilder {
-    private final ClickHouseQuery query;
+public final class WhereBuilder<T extends BaseQuery<T>> {
+    private final T query;
     private final String column;
 
-    public WhereBuilder(ClickHouseQuery query, String column) {
+    public WhereBuilder(T query, String column) {
         this.query = query;
         this.column = column;
     }
 
-    /** {@code column = :param} — skipped when value is null. */
-    public ClickHouseQuery eq(Object value) {
+    /** {@code column = :param} — skipped when value is null or empty string. */
+    public T eq(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column));
         query.whereClauses.add(column + " = :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
     /** {@code column = :param} — applied only when value is not null and not blank. */
-    public ClickHouseQuery eqIfNotBlank(String value) {
+    public T eqIfNotBlank(String value) {
         if (value != null && !value.isBlank()) {
-            String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
+            String paramName = toCamelCase(stripTablePrefix(column));
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
@@ -40,55 +44,60 @@ public final class WhereBuilder {
     }
 
     /** {@code column = :param} — applied only when condition is true. */
-    public ClickHouseQuery eqIf(boolean condition, Object value) {
+    public T eqIf(boolean condition, Object value) {
         if (condition) {
-            String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
+            String paramName = toCamelCase(stripTablePrefix(column));
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
         return query;
     }
 
-    /** {@code column != :param} — skipped when value is null. */
-    public ClickHouseQuery ne(Object value) {
+    /** {@code column != :param} — skipped when value is null or empty string. */
+    public T ne(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Ne";
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column)) + "Ne";
         query.whereClauses.add(column + " != :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column > :param} — skipped when value is null. */
-    public ClickHouseQuery gt(Object value) {
+    /** {@code column > :param} — skipped when value is null or empty string. */
+    public T gt(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Gt";
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column)) + "Gt";
         query.whereClauses.add(column + " > :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column >= :param} — skipped when value is null. */
-    public ClickHouseQuery gte(Object value) {
+    /** {@code column >= :param} — skipped when value is null or empty string. */
+    public T gte(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Gte";
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column)) + "Gte";
         query.whereClauses.add(column + " >= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column < :param} — skipped when value is null. */
-    public ClickHouseQuery lt(Object value) {
+    /** {@code column < :param} — skipped when value is null or empty string. */
+    public T lt(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Lt";
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column)) + "Lt";
         query.whereClauses.add(column + " < :" + paramName);
         query.params.addValue(paramName, value);
         return query;
     }
 
-    /** {@code column <= :param} — skipped when value is null. */
-    public ClickHouseQuery lte(Object value) {
+    /** {@code column <= :param} — skipped when value is null or empty string. */
+    public T lte(Object value) {
         if (value == null) return query;
-        String paramName = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Lte";
+        if (value instanceof String && ((String) value).isEmpty()) return query;
+        String paramName = toCamelCase(stripTablePrefix(column)) + "Lte";
         query.whereClauses.add(column + " <= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -97,9 +106,16 @@ public final class WhereBuilder {
     /**
      * Date range: {@code column >= :colFrom AND column <= :colTo}.
      * Only non-null bounds are applied.
+     * 
+     * @throws InvalidRangeException if from > to
      */
-    public ClickHouseQuery between(Instant from, Instant to) {
-        String base = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
+    public T between(Instant from, Instant to) {
+        // Validate range if both bounds are present
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new InvalidRangeException(column, from, to);
+        }
+        
+        String base = toCamelCase(stripTablePrefix(column));
         if (from != null) {
             String p = base + "From";
             query.whereClauses.add(column + " >= :" + p);
@@ -116,16 +132,38 @@ public final class WhereBuilder {
     /**
      * Generic range: {@code column >= :colFrom AND column <= :colTo}.
      * Works with numbers, strings, or any comparable values.
-     * Only non-null bounds are applied.
+     * Only non-null and non-empty bounds are applied.
+     * 
+     * @throws InvalidRangeException if from > to (for Comparable types)
      */
-    public ClickHouseQuery between(Object from, Object to) {
-        String base = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
-        if (from != null) {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public T between(Object from, Object to) {
+        // Validate range if both bounds are present and comparable
+        if (from != null && to != null 
+            && !(from instanceof String && ((String) from).isEmpty())
+            && !(to instanceof String && ((String) to).isEmpty())) {
+            
+            // Check if both are Comparable and of the same type
+            if (from instanceof Comparable && to instanceof Comparable 
+                && from.getClass().equals(to.getClass())) {
+                try {
+                    Comparable comparableFrom = (Comparable) from;
+                    if (comparableFrom.compareTo(to) > 0) {
+                        throw new InvalidRangeException(column, from, to);
+                    }
+                } catch (ClassCastException e) {
+                    // If comparison fails, skip validation (incompatible types)
+                }
+            }
+        }
+        
+        String base = toCamelCase(stripTablePrefix(column));
+        if (from != null && !(from instanceof String && ((String) from).isEmpty())) {
             String p = base + "From";
             query.whereClauses.add(column + " >= :" + p);
             query.params.addValue(p, from);
         }
-        if (to != null) {
+        if (to != null && !(to instanceof String && ((String) to).isEmpty())) {
             String p = base + "To";
             query.whereClauses.add(column + " <= :" + p);
             query.params.addValue(p, to);
@@ -137,12 +175,12 @@ public final class WhereBuilder {
      * IN clause with auto-expansion.
      * <p>Skipped when values is null or empty.
      */
-    public <T> ClickHouseQuery in(Collection<T> values) {
+    public <V> T in(Collection<V> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = ClickHouseQuery.toCamelCase(stripTablePrefix(column));
+        String prefix = toCamelCase(stripTablePrefix(column));
         StringJoiner joiner = new StringJoiner(", ");
         int i = 0;
-        for (T val : values) {
+        for (V val : values) {
             String pName = prefix + i;
             joiner.add(":" + pName);
             query.params.addValue(pName, val);
@@ -156,12 +194,12 @@ public final class WhereBuilder {
      * NOT IN clause with auto-expansion.
      * <p>Skipped when values is null or empty.
      */
-    public <T> ClickHouseQuery notIn(Collection<T> values) {
+    public <V> T notIn(Collection<V> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = ClickHouseQuery.toCamelCase(stripTablePrefix(column)) + "Not";
+        String prefix = toCamelCase(stripTablePrefix(column)) + "Not";
         StringJoiner joiner = new StringJoiner(", ");
         int i = 0;
-        for (T val : values) {
+        for (V val : values) {
             String pName = prefix + i;
             joiner.add(":" + pName);
             query.params.addValue(pName, val);
@@ -172,38 +210,38 @@ public final class WhereBuilder {
     }
 
     /** {@code column IS NULL} */
-    public ClickHouseQuery isNull() {
+    public T isNull() {
         query.whereClauses.add(column + " IS NULL");
         return query;
     }
 
     /** {@code column IS NOT NULL} */
-    public ClickHouseQuery isNotNull() {
+    public T isNotNull() {
         query.whereClauses.add(column + " IS NOT NULL");
         return query;
     }
 
     /** {@code column IN (subquery)} — raw SQL string. */
-    public ClickHouseQuery inSubQuery(String subQuery) {
+    public T inSubQuery(String subQuery) {
         query.whereClauses.add(column + " IN (" + subQuery + ")");
         return query;
     }
 
     /** {@code column NOT IN (subquery)} — raw SQL string. */
-    public ClickHouseQuery notInSubQuery(String subQuery) {
+    public T notInSubQuery(String subQuery) {
         query.whereClauses.add(column + " NOT IN (" + subQuery + ")");
         return query;
     }
 
-    /** Fluent {@code column IN (subquery)} using a ClickHouseQuery. */
-    public ClickHouseQuery in(ClickHouseQuery subQuery) {
+    /** Fluent {@code column IN (subquery)} using a BaseQuery. */
+    public T in(BaseQuery<?> subQuery) {
         query.whereClauses.add(column + " IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));
         return query;
     }
 
-    /** Fluent {@code column NOT IN (subquery)} using a ClickHouseQuery. */
-    public ClickHouseQuery notIn(ClickHouseQuery subQuery) {
+    /** Fluent {@code column NOT IN (subquery)} using a BaseQuery. */
+    public T notIn(BaseQuery<?> subQuery) {
         query.whereClauses.add(column + " NOT IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));
         return query;
@@ -217,5 +255,21 @@ public final class WhereBuilder {
         return column.contains(".") 
             ? column.substring(column.lastIndexOf('.') + 1) 
             : column;
+    }
+
+    /** Convert snake_case to camelCase for parameter naming. */
+    private static String toCamelCase(String snake) {
+        if (snake == null || snake.isEmpty()) return snake;
+        StringBuilder result = new StringBuilder();
+        boolean capitalizeNext = false;
+        for (char c : snake.toCharArray()) {
+            if (c == '_') {
+                capitalizeNext = true;
+            } else {
+                result.append(capitalizeNext ? Character.toUpperCase(c) : c);
+                capitalizeNext = false;
+            }
+        }
+        return result.toString();
     }
 }

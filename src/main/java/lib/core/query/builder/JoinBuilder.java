@@ -1,11 +1,11 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
 
 /**
  * Fluent builder for JOIN conditions.
- * Created via {@link ClickHouseQuery#join(String)}, {@link ClickHouseQuery#leftJoin(String)},
- * or {@link ClickHouseQuery#rightJoin(String)}.
+ * Created via {@link BaseQuery#join(String)}, {@link BaseQuery#leftJoin(String)},
+ * or {@link BaseQuery#rightJoin(String)}.
  *
  * <h3>Usage</h3>
  * <pre>{@code
@@ -21,12 +21,12 @@ import lib.core.clickhouse.query.ClickHouseQuery;
  * .join("user_profile u").on("u.id = t.user_id AND u.active = 1")
  * }</pre>
  */
-public final class JoinBuilder {
-    private final ClickHouseQuery query;
+public final class JoinBuilder<T extends BaseQuery<T>> {
+    private final T query;
     private final String joinType;
     private final String table;
 
-    public JoinBuilder(ClickHouseQuery query, String joinType, String table) {
+    public JoinBuilder(T query, String joinType, String table) {
         this.query = query;
         this.joinType = joinType;
         this.table = table;
@@ -40,11 +40,11 @@ public final class JoinBuilder {
      * @param rightColumn the right column (e.g. {@code "t.user_id"})
      * @return a {@link JoinOnBuilder} for chaining {@code .and()} or transitioning to the next phase
      */
-    public JoinOnBuilder on(String leftColumn, String rightColumn) {
+    public JoinOnBuilder<T> on(String leftColumn, String rightColumn) {
         String joinClause = joinType + " " + table + " ON " + leftColumn + " = " + rightColumn;
         int index = query.joinClauses.size();
         query.joinClauses.add(joinClause);
-        return new JoinOnBuilder(query, index);
+        return new JoinOnBuilder<>(query, index);
     }
 
     /**
@@ -53,7 +53,7 @@ public final class JoinBuilder {
      * @param condition the raw join condition
      * @return the parent query builder
      */
-    public ClickHouseQuery on(String condition) {
+    public T on(String condition) {
         query.joinClauses.add(joinType + " " + table + " ON " + condition);
         return query;
     }
@@ -61,7 +61,7 @@ public final class JoinBuilder {
     /**
      * Expr-accepting overload for type-safe column references.
      */
-    public JoinOnBuilder on(lib.core.clickhouse.expression.CH.Expr leftColumn, lib.core.clickhouse.expression.CH.Expr rightColumn) {
+    public JoinOnBuilder<T> on(lib.core.query.expression.CommonFunctions.Expr leftColumn, lib.core.query.expression.CommonFunctions.Expr rightColumn) {
         return on(leftColumn.toString(), rightColumn.toString());
     }
 }

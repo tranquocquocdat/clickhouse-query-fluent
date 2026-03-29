@@ -1,19 +1,19 @@
-package lib.core.clickhouse.query.builder;
+package lib.core.query.builder;
 
-import lib.core.clickhouse.query.ClickHouseQuery;
+import lib.core.query.BaseQuery;
 
 import java.util.StringJoiner;
 
 /**
  * Fluent builder for LIKE/ILIKE search across multiple columns.
- * Created via {@link ClickHouseQuery#whereILike(String)} or {@link ClickHouseQuery#whereLike(String)}.
+ * Created via {@link BaseQuery#whereILike(String)} or {@link BaseQuery#whereLike(String)}.
  */
-public final class WhereILikeBuilder {
-    private final ClickHouseQuery query;
+public final class WhereILikeBuilder<T extends BaseQuery<T>> {
+    private final T query;
     private final String keyword;
     private final boolean caseSensitive;
 
-    public WhereILikeBuilder(ClickHouseQuery query, String keyword, boolean caseSensitive) {
+    public WhereILikeBuilder(T query, String keyword, boolean caseSensitive) {
         this.query = query;
         this.keyword = keyword;
         this.caseSensitive = caseSensitive;
@@ -23,7 +23,7 @@ public final class WhereILikeBuilder {
      * Apply LIKE/ILIKE search across the given columns (combined with OR).
      * Uses {@code %keyword%} pattern. Skipped when keyword is null or blank.
      */
-    public ClickHouseQuery on(String... columns) {
+    public T on(String... columns) {
         if (keyword == null || keyword.isBlank()) return query;
         String operator = caseSensitive ? "LIKE" : "ILIKE";
         String paramName = caseSensitive ? "_likeKeyword" : "_keyword";
@@ -37,7 +37,7 @@ public final class WhereILikeBuilder {
     }
 
     /** Overload accepting Expr/Object columns directly (no .toString() needed). */
-    public ClickHouseQuery on(Object... columns) {
+    public T on(Object... columns) {
         if (keyword == null || keyword.isBlank()) return query;
         String operator = caseSensitive ? "LIKE" : "ILIKE";
         String paramName = caseSensitive ? "_likeKeyword" : "_keyword";
@@ -55,7 +55,7 @@ public final class WhereILikeBuilder {
      * Uses {@code keyword%} pattern — optimized for index prefix matching.
      * Skipped when keyword is null or blank.
      */
-    public ClickHouseQuery onPrefix(String... columns) {
+    public T onPrefix(String... columns) {
         if (keyword == null || keyword.isBlank()) return query;
         String operator = caseSensitive ? "LIKE" : "ILIKE";
         String paramName = caseSensitive ? "_likePrefixKeyword" : "_prefixKeyword";
@@ -69,7 +69,7 @@ public final class WhereILikeBuilder {
     }
 
     /** Overload accepting Expr/Object columns directly (no .toString() needed). */
-    public ClickHouseQuery onPrefix(Object... columns) {
+    public T onPrefix(Object... columns) {
         if (keyword == null || keyword.isBlank()) return query;
         String operator = caseSensitive ? "LIKE" : "ILIKE";
         String paramName = caseSensitive ? "_likePrefixKeyword" : "_prefixKeyword";
