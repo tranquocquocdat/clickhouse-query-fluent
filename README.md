@@ -1286,69 +1286,59 @@ ClickHouseInsert.into("orders")
 
 ## Observability (Logging & Metrics)
 
-The library provides a pluggable **Observer pattern** — no AOP, no Spring dependency in the library core. You configure it once in your Spring Boot app and it fires automatically on every query.
+The library ships with **Spring Boot AutoConfiguration** — no `@Configuration` class needed.
+Drop the JAR in, flip one flag in `application.yml`, and query logging/metrics activate automatically.
 
 ### How It Works
 
 ```
-query() → [time start]
-    → cache HIT  → emit(QueryEvent{cache=HIT})  → return
-    → cache MISS → jdbc.query() → emit(QueryEvent{cache=MISS, durationMs=800}) → async cache write → return
+Spring Boot starts
+  → scans META-INF/spring/AutoConfiguration.imports
+  → finds ClickHouseQueryAutoConfiguration
+  → reads clickhouse-query.* from application.yml
+  → creates LoggingQueryObserver @Bean (if enabled=true)
+  → registers it in QueryObserverRegistry
+
+Every query():
+  [time start]
+  → cache HIT  → emit(QueryEvent{cache=HIT,  durationMs=2})   → return
+  → cache MISS → jdbc.query() → emit(QueryEvent{cache=MISS, durationMs=800}) → async save → return
 ```
 
-### Step 1: Configure `application.yml`
+### Kích hoạt — chỉ cần YAML (không cần viết @Configuration gì cả)
 
 ```yaml
+# application.yml
 clickhouse-query:
   logging:
-    enabled: true
-    log-sql: true           # log SQL at DEBUG level
-    log-params: false       # log bind params (may expose PII) — false by default
-    slow-query-ms: 1000     # queries slower than this → logged at WARN
+    enabled: true             # ← flip this switch to activate
+    log-sql: true             # log every SQL at DEBUG level
+    log-params: false         # ⚠ also log bind values (may expose PII)
+    slow-query-ms: 500        # queries > 500ms → logged at WARN
   metrics:
-    enabled: true           # log cache HIT / MISS at INFO level
+    enabled: true             # cache HIT / MISS → logged at INFO
+
+# Enable the logger to see DEBUG output
+logging:
+  level:
+    clickhouse-query: DEBUG
 ```
 
-### Step 2: Register Observer as a Spring `@Bean`
+> **That's all.** No `@Bean`, no `@PostConstruct`, no imports. The auto-config does everything.
 
-```java
-@Configuration
-public class ClickHouseObserverConfig {
+### Log Output
 
-    @Bean
-    @ConditionalOnProperty(name = "clickhouse-query.logging.enabled", havingValue = "true")
-    public QueryObserver clickHouseQueryObserver(
-            @Value("${clickhouse-query.logging.log-sql:true}")       boolean logSql,
-            @Value("${clickhouse-query.logging.log-params:false}")   boolean logParams,
-            @Value("${clickhouse-query.logging.slow-query-ms:1000}") long slowMs,
-            @Value("${clickhouse-query.metrics.enabled:true}")       boolean metrics) {
+```log
+# Every query — DEBUG (log-sql: true)
+[LIST] 43ms  | cache=DISABLED | rows=31  | sql=SELECT date, sum(revenue) ...
 
-        LoggingQueryObserver obs = LoggingQueryObserver.builder()
-            .logSql(logSql)
-            .logParams(logParams)
-            .slowQueryThresholdMs(slowMs)
-            .trackMetrics(metrics)
-            .build();
+# Cache HIT — INFO (metrics.enabled: true)
+[Cache HIT]  type=PAGE | 2ms   | rows=20
 
-        QueryObserverRegistry.register(obs);   // ← one-time global registration
-        return obs;
-    }
-}
-```
-
-### Log Output Examples
-
-```
-# Normal query (DEBUG)
-[LIST] 43ms | cache=DISABLED | rows=31 | sql=SELECT date, sum(revenue) AS total FROM orders WHERE ...
-
-# Cache HIT (INFO, trackMetrics=true)
-[Cache HIT]  type=PAGE | 2ms | rows=20
-
-# Cache MISS (INFO, trackMetrics=true)
+# Cache MISS — INFO (saved to Redis in background)
 [Cache MISS] type=PAGE | 843ms | rows=20 — saved to cache
 
-# Slow query (WARN, threshold exceeded)
+# Slow query — WARN (slow-query-ms threshold breached)
 [SLOW QUERY] 2341ms | type=LIST | cache=MISS | rows=10000 | sql=SELECT ...
 [SLOW QUERY params] {tenantId=TENANT_001, fromDate=2026-01-01T00:00:00Z}
 ```
@@ -1357,32 +1347,33 @@ public class ClickHouseObserverConfig {
 
 | YAML Key | Default | Description |
 |---|---|---|
-| `logging.enabled` | — | Enable/disable the observer bean entirely (`@ConditionalOnProperty`) |
+| `logging.enabled` | `false` | Master switch — `true` activates the auto-configured observer |
 | `logging.log-sql` | `true` | Log every SQL at `DEBUG` |
-| `logging.log-params` | `false` | Also log bind parameters (**⚠ may expose PII**) |
-| `logging.slow-query-ms` | `1000` | Queries above threshold → logged at `WARN` |
+| `logging.log-params` | `false` | Log bind parameter values (**⚠ may expose PII**) |
+| `logging.slow-query-ms` | `1000` | Queries above this threshold → `WARN` |
 | `metrics.enabled` | `true` | Log cache `HIT` / `MISS` at `INFO` |
 
-> **Logger name:** `clickhouse-query` — add `logging.level.clickhouse-query: DEBUG` in YAML to see all query logs.
+### Override with Custom Observer
 
-### Custom Observer
-
-Implement the interface directly for custom metrics pipelines (Micrometer, DataDog, etc.):
+Define your own `@Bean QueryObserver` to bypass the auto-config (e.g., for Micrometer/DataDog):
 
 ```java
-@Component
-public class MicrometerQueryObserver implements QueryObserver {
-    private final MeterRegistry registry;
-
-    @Override
-    public void onQuery(QueryEvent e) {
-        registry.timer("clickhouse.query",
-                "type", e.getQueryType().name(),
-                "cache", e.getCacheStatus().name())
-            .record(Duration.ofMillis(e.getDurationMs()));
-    }
+// ClickHouseQueryAutoConfiguration skips its bean when this exists
+@Bean
+public QueryObserver clickHouseQueryObserver(MeterRegistry registry) {
+    return event -> registry.timer("clickhouse.query",
+            "type",  event.getQueryType().name(),
+            "cache", event.getCacheStatus().name())
+        .record(Duration.ofMillis(event.getDurationMs()));
 }
 ```
+
+> Register your custom observer in `@PostConstruct`:
+> ```java
+> @PostConstruct
+> public void setup() { QueryObserverRegistry.register(clickHouseQueryObserver()); }
+> ```
+
 
 ---
 
