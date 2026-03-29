@@ -3,6 +3,10 @@ package lib.core.query;
 import lib.core.query.builder.*;
 import lib.core.query.cache.CacheOptions;
 import lib.core.query.cache.QueryCacheManager;
+import lib.core.query.cursor.CursorField;
+import lib.core.query.cursor.CursorPage;
+import lib.core.query.cursor.CursorRequest;
+import lib.core.query.cursor.CursorToken;
 import lib.core.query.expression.CommonFunctions;
 import lib.core.query.observe.CacheStatus;
 import lib.core.query.observe.QueryEvent;
@@ -21,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Abstract base class for SQL query builders.
@@ -919,6 +924,152 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
     public <R> R queryForObject(NamedParameterJdbcTemplate jdbc, Class<R> type) {
         String sql = toSql();
         return jdbc.queryForObject(sql, params, type);
+    }
+
+    // ── Cursor Pagination (Keyset) ─────────────────────────────────────────
+
+    /**
+     * Execute a <b>cursor-based (keyset) paginated query</b> using a custom
+     * {@link RowMapper}.
+     *
+     * <p>
+     * Unlike {@link #queryPage} which uses {@code LIMIT/OFFSET}, this method avoids
+     * full-table scans on deep pages by injecting a
+     * {@code WHERE (col1, col2) < (:v1, :v2)}
+     * clause derived from the last row's key values.
+     *
+     * <p>
+     * Usage:
+     * 
+     * <pre>{@code
+     * CursorPage<Report> page = ClickHouseQuery
+     *     .select("event_date", "id", "revenue")
+     *     .from("events")
+     *     .where("tenant_id").eq(tenantId)
+     *     .orderBy("event_date", "DESC")
+     *     .orderBy("id", "DESC")
+     *     .queryCursor(
+     *         CursorRequest.firstPage(50),
+     *         jdbc, rowMapper,
+     *         row -> List.of(
+     *             CursorField.of("event_date", row.getEventDate()),
+     *             CursorField.of("id",         row.getId())
+     *         ));
+     *
+     * if (page.hasNext()) {
+     *     CursorRequest.nextPage(50, page.getNextCursor())
+     * }
+     * }</pre>
+     *
+     * @param request      the cursor request (limit + optional cursor token)
+     * @param jdbc         the JDBC template
+     * @param rowMapper    row mapper
+     * @param keyExtractor function: row → cursor fields (columns + values from the
+     *                     last row)
+     * @param <R>          the row type
+     * @return a {@link CursorPage} containing data + next cursor token
+     */
+    public <R> CursorPage<R> queryCursor(
+            CursorRequest request,
+            NamedParameterJdbcTemplate jdbc,
+            RowMapper<R> rowMapper,
+            Function<R, List<CursorField>> keyExtractor) {
+
+        // ── 1. Inject cursor WHERE clause (skip for first page) ──
+        if (!request.isFirstPage()) {
+            List<CursorField> fields = CursorToken.decode(request.getCursor());
+            applyCursorWhere(fields);
+        }
+
+        // ── 2. Fetch limit + 1 to detect hasNext ──
+        int fetchLimit = request.getLimit() + 1;
+        limit(fetchLimit);
+
+        List<R> rows = query(jdbc, rowMapper);
+
+        // ── 3. Determine if there's a next page ──
+        boolean hasNext = rows.size() > request.getLimit();
+        if (hasNext) {
+            rows = new ArrayList<>(rows.subList(0, request.getLimit()));
+        }
+
+        // ── 4. Encode next cursor from last row's key fields ──
+        String nextCursor = null;
+        if (hasNext && !rows.isEmpty()) {
+            List<CursorField> lastRowFields = keyExtractor.apply(rows.get(rows.size() - 1));
+            nextCursor = CursorToken.encode(lastRowFields);
+        }
+
+        return new CursorPage<R>(rows, nextCursor);
+    }
+
+    /**
+     * Execute a cursor-based paginated query with <b>auto DTO mapping</b>.
+     *
+     * <pre>{@code
+     * CursorPage<Report> page = ClickHouseQuery
+     *         .select("event_date", "id", "revenue")
+     *         .from("events")
+     *         .where("tenant_id").eq(tenantId)
+     *         .orderBy("event_date", "DESC").orderBy("id", "DESC")
+     *         .queryCursor(
+     *                 CursorRequest.firstPage(50),
+     *                 jdbc, Report.class,
+     *                 row -> List.of(
+     *                         CursorField.of("event_date", row.getEventDate()),
+     *                         CursorField.of("id", row.getId())));
+     * }</pre>
+     *
+     * @param request      the cursor request
+     * @param jdbc         the JDBC template
+     * @param type         the DTO class
+     * @param keyExtractor function: row → cursor fields
+     * @param <R>          the DTO type
+     * @return a {@link CursorPage} with auto-mapped DTOs + next cursor
+     */
+    public <R> CursorPage<R> queryCursor(
+            CursorRequest request,
+            NamedParameterJdbcTemplate jdbc,
+            Class<R> type,
+            Function<R, List<CursorField>> keyExtractor) {
+        return queryCursor(request, jdbc, smartMapper(type), keyExtractor);
+    }
+
+    /**
+     * Injects a keyset WHERE clause from cursor fields.
+     * <ul>
+     * <li>1 field: {@code WHERE col < :cursor_col}
+     * <li>2+ fields: {@code WHERE (col1, col2) < (:cursor_col1, :cursor_col2)}
+     * </ul>
+     */
+    private void applyCursorWhere(List<CursorField> fields) {
+        if (fields.isEmpty())
+            return;
+
+        if (fields.size() == 1) {
+            CursorField f = fields.get(0);
+            String paramName = "cursor_" + f.getColumn().replace(".", "_");
+            whereClauses.add(f.getColumn() + " < :" + paramName);
+            params.addValue(paramName, f.getValue());
+        } else {
+            // Tuple comparison: (col1, col2) < (:cursor_col1, :cursor_col2)
+            StringBuilder colTuple = new StringBuilder("(");
+            StringBuilder valueTuple = new StringBuilder("(");
+            for (int i = 0; i < fields.size(); i++) {
+                CursorField f = fields.get(i);
+                String paramName = "cursor_" + f.getColumn().replace(".", "_");
+                if (i > 0) {
+                    colTuple.append(", ");
+                    valueTuple.append(", ");
+                }
+                colTuple.append(f.getColumn());
+                valueTuple.append(":").append(paramName);
+                params.addValue(paramName, f.getValue());
+            }
+            colTuple.append(")");
+            valueTuple.append(")");
+            whereClauses.add(colTuple + " < " + valueTuple);
+        }
     }
 
     /**
