@@ -13,23 +13,32 @@ import java.util.function.Consumer;
 
 /**
  * Abstract base class for SQL query builders.
- * Provides common SQL query building functionality that works across all relational databases.
+ * Provides common SQL query building functionality that works across all
+ * relational databases.
  * 
- * <p>Subclasses (e.g., ClickHouseQuery, PostgreSQLQuery) extend this to add database-specific features.
+ * <p>
+ * Subclasses (e.g., ClickHouseQuery, PostgreSQLQuery) extend this to add
+ * database-specific features.
  * 
- * <p>The builder enforces correct SQL clause ordering at runtime:
+ * <p>
+ * The builder enforces correct SQL clause ordering at runtime:
+ * 
  * <pre>
  * SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT
  * </pre>
- * Calling a method out of order throws {@link IllegalStateException} with a clear message.
  * 
- * @param <T> the concrete subclass type (self-referential generic for fluent API)
+ * Calling a method out of order throws {@link IllegalStateException} with a
+ * clear message.
+ * 
+ * @param <T> the concrete subclass type (self-referential generic for fluent
+ *            API)
  */
 public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Phases enforce correct SQL clause ordering.
-     * Each method advances the phase; calling out of order throws {@link IllegalStateException}.
+     * Each method advances the phase; calling out of order throws
+     * {@link IllegalStateException}.
      *
      * <pre>
      * SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT
@@ -46,7 +55,10 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         LIMIT(7);
 
         final int order;
-        Phase(int order) { this.order = order; }
+
+        Phase(int order) {
+            this.order = order;
+        }
     }
 
     protected Phase currentPhase = Phase.SELECT;
@@ -66,7 +78,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     // Subquery FROM
     protected BaseQuery<?> fromSubQuery;
-    String fromSubQueryAlias;  // Package-private for SubQueryFromBuilder access
+    String fromSubQueryAlias; // Package-private for SubQueryFromBuilder access
 
     // UNION ALL
     protected final List<BaseQuery<?>> unionQueries = new ArrayList<>();
@@ -78,18 +90,20 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      * Package-private constructor prevents external instantiation.
      * Subclasses should provide their own factory methods.
      */
-    BaseQuery() {}
+    BaseQuery() {
+    }
 
     /**
-     * Advance to the given phase. Same phase is allowed (e.g. multiple {@code .where()} calls).
+     * Advance to the given phase. Same phase is allowed (e.g. multiple
+     * {@code .where()} calls).
      * Going backward throws {@link IllegalStateException}.
      */
     protected void advanceTo(Phase target) {
         if (target.order < currentPhase.order) {
             throw new IllegalStateException(
                     "Cannot call " + target.name()
-                    + " after " + currentPhase.name()
-                    + ". Expected order: SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT");
+                            + " after " + currentPhase.name()
+                            + ". Expected order: SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT");
         }
         currentPhase = target;
     }
@@ -105,12 +119,14 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Generate the GROUP BY clause for SQL generation.
-     * Subclasses can override to add database-specific modifiers (e.g., WITH TOTALS in ClickHouse).
+     * Subclasses can override to add database-specific modifiers (e.g., WITH TOTALS
+     * in ClickHouse).
      * 
      * @return the GROUP BY clause string, or empty string if no GROUP BY
      */
     protected String generateGroupByClause() {
-        if (groupByColumns.isEmpty()) return "";
+        if (groupByColumns.isEmpty())
+            return "";
         return "GROUP BY " + String.join(", ", groupByColumns);
     }
 
@@ -145,14 +161,15 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      *
      * <pre>{@code
      * query.from(
-     *     subQuery.select("user_id", "sum(amount) AS total")
-     *         .from("orders").groupBy("user_id")
-     * ).as("sub")
-     * .where("total").gt(1000)
+     *         subQuery.select("user_id", "sum(amount) AS total")
+     *                 .from("orders").groupBy("user_id"))
+     *         .as("sub")
+     *         .where("total").gt(1000)
      * }</pre>
      *
      * @param subQuery the inner query
-     * @return a {@link SubQueryFromBuilder} — call {@code .as("alias")} to set the alias
+     * @return a {@link SubQueryFromBuilder} — call {@code .as("alias")} to set the
+     *         alias
      */
     public SubQueryFromBuilder<T> from(BaseQuery<?> subQuery) {
         advanceTo(Phase.FROM);
@@ -186,6 +203,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Fluent INNER JOIN.
+     * 
      * <pre>{@code
      * .join("user_profile u").on("u.id = t.user_id")
      * }</pre>
@@ -198,13 +216,16 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return new JoinBuilder<>(self(), "JOIN", table);
     }
 
-    /** INNER JOIN using an {@link Alias}. {@code .join(u)} → {@code JOIN users u} */
+    /**
+     * INNER JOIN using an {@link Alias}. {@code .join(u)} → {@code JOIN users u}
+     */
     public JoinBuilder<T> join(Alias alias) {
         return join(alias.ref());
     }
 
     /**
      * Fluent LEFT JOIN.
+     * 
      * <pre>{@code
      * .leftJoin("settings s").on("s.user_id = t.user_id")
      * }</pre>
@@ -214,13 +235,17 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return new JoinBuilder<>(self(), "LEFT JOIN", table);
     }
 
-    /** LEFT JOIN using an {@link Alias}. {@code .leftJoin(p)} → {@code LEFT JOIN products p} */
+    /**
+     * LEFT JOIN using an {@link Alias}. {@code .leftJoin(p)} →
+     * {@code LEFT JOIN products p}
+     */
     public JoinBuilder<T> leftJoin(Alias alias) {
         return leftJoin(alias.ref());
     }
 
     /**
      * Fluent RIGHT JOIN.
+     * 
      * <pre>{@code
      * .rightJoin("other o").on("o.id = t.other_id")
      * }</pre>
@@ -230,13 +255,17 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return new JoinBuilder<>(self(), "RIGHT JOIN", table);
     }
 
-    /** RIGHT JOIN using an {@link Alias}. {@code .rightJoin(x)} → {@code RIGHT JOIN x_table x} */
+    /**
+     * RIGHT JOIN using an {@link Alias}. {@code .rightJoin(x)} →
+     * {@code RIGHT JOIN x_table x}
+     */
     public JoinBuilder<T> rightJoin(Alias alias) {
         return rightJoin(alias.ref());
     }
 
     /**
      * Fluent FULL OUTER JOIN.
+     * 
      * <pre>{@code
      * .fullJoin("other o").on("o.id = t.other_id")
      * }</pre>
@@ -255,6 +284,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Start a fluent WHERE clause on a column.
+     * 
      * <pre>{@code
      * .where("tenant_id").eq(tenantId)
      * .where("amount").gt(100)
@@ -273,6 +303,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Start a fluent WHERE clause using a type-safe {@link CommonFunctions.Expr}.
+     * 
      * <pre>{@code
      * .where(alias.col("tenant_id")).eq(tenantId)
      * }</pre>
@@ -283,9 +314,11 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Start a fluent ILIKE search across multiple columns.
+     * 
      * <pre>{@code
      * .whereILike(keyword).on("session_id", "user_id")
      * }</pre>
+     * 
      * Skipped when keyword is null or blank.
      *
      * @param keyword the search keyword (will be wrapped with {@code %keyword%})
@@ -298,9 +331,11 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Start a fluent case-sensitive LIKE search across multiple columns.
+     * 
      * <pre>{@code
      * .whereLike(keyword).on("session_id", "user_id")
      * }</pre>
+     * 
      * Skipped when keyword is null or blank.
      *
      * @param keyword the search keyword (will be wrapped with {@code %keyword%})
@@ -330,6 +365,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Add an OR group to WHERE.
+     * 
      * <pre>{@code
      * .whereOr(or -> or
      *     .add("status", "ACTIVE")
@@ -366,7 +402,8 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     public T groupBy(Object... columns) {
         String[] strs = new String[columns.length];
-        for (int i = 0; i < columns.length; i++) strs[i] = columns[i].toString();
+        for (int i = 0; i < columns.length; i++)
+            strs[i] = columns[i].toString();
         return groupBy(strs);
     }
 
@@ -374,6 +411,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     /**
      * Start a fluent HAVING clause on an expression.
+     * 
      * <pre>{@code
      * import static lib.core.query.expression.CommonFunctions.*;
      *
@@ -442,11 +480,10 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      *
      * <pre>{@code
      * query.select("user_id", "amount").from("orders_2024")
-     *     .unionAll(
-     *         query.select("user_id", "amount").from("orders_2025")
-     *     )
-     *     .orderBy("amount", SortOrder.DESC)
-     *     .limit(10)
+     *         .unionAll(
+     *                 query.select("user_id", "amount").from("orders_2025"))
+     *         .orderBy("amount", SortOrder.DESC)
+     *         .limit(10)
      * }</pre>
      *
      * @param other the query to UNION ALL with
@@ -503,7 +540,8 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         if (!cteList.isEmpty()) {
             sql.append("WITH ");
             for (int i = 0; i < cteList.size(); i++) {
-                if (i > 0) sql.append(",\n     ");
+                if (i > 0)
+                    sql.append(",\n     ");
                 String[] cte = cteList.get(i);
                 sql.append(cte[0]).append(" AS (\n  ").append(cte[1]).append("\n)");
             }
@@ -594,9 +632,11 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
     /**
      * Execute query and auto-map results to a DTO class or Java record.
      * <ul>
-     *   <li>For <b>records</b>: uses {@link RecordRowMapper} — maps {@code snake_case} columns
-     *       to record component names (camelCase). No setters needed.</li>
-     *   <li>For <b>classes</b>: uses {@link BeanPropertyRowMapper} — requires default constructor + setters.</li>
+     * <li>For <b>records</b>: uses {@link RecordRowMapper} — maps
+     * {@code snake_case} columns
+     * to record component names (camelCase). No setters needed.</li>
+     * <li>For <b>classes</b>: uses {@link BeanPropertyRowMapper} — requires default
+     * constructor + setters.</li>
      * </ul>
      *
      * @param jdbc the JDBC template
@@ -623,8 +663,10 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
     }
 
     /**
-     * Execute a <b>single query</b> that returns both paginated data and total count.
-     * Internally appends {@code count(*) OVER() AS _total} to the SELECT, so no second query is needed.
+     * Execute a <b>single query</b> that returns both paginated data and total
+     * count.
+     * Internally appends {@code count(*) OVER() AS _total} to the SELECT, so no
+     * second query is needed.
      *
      * @param page      the page index (0-based)
      * @param pageSize  number of rows per page
@@ -634,24 +676,16 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      * @return a {@link Page} containing data + total count
      */
     public <R> Page<R> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, RowMapper<R> rowMapper) {
-        // Clone select columns and inject count(*) OVER() — avoid mutating original list
-        List<String> paginatedColumns = new ArrayList<>(this.selectColumns);
-        paginatedColumns.add("count(*) OVER() AS _total");
-
-        // Build SQL with paginated columns
-        String originalSelectJoin = String.join(",\n       ", this.selectColumns);
-        String paginatedSelectJoin = String.join(",\n       ", paginatedColumns);
-        
-        // Apply pagination
+        // Apply pagination params first (mutates limitVal / offsetVal + params)
         limit(pageSize);
         offset((long) page * pageSize);
 
-        String sql = toSql();
-        // Replace original SELECT columns with paginated columns
-        sql = sql.replace(originalSelectJoin, paginatedSelectJoin);
+        // Build paginated SQL with count(*) OVER() injected safely via the normal
+        // pipeline
+        String sql = buildPaginatedSql();
 
         // Track total from first row
-        final long[] totalHolder = {0};
+        final long[] totalHolder = { 0 };
 
         List<R> data = jdbc.query(sql, params, (rs, rowNum) -> {
             if (rowNum == 0) {
@@ -661,6 +695,28 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         });
 
         return new Page<>(data, totalHolder[0], page, pageSize);
+    }
+
+    /**
+     * Build the paginated SQL by temporarily adding
+     * {@code count(*) OVER() AS _total}
+     * to the SELECT list, generating the full SQL, then restoring the original
+     * list.
+     *
+     * <p>
+     * This avoids the fragile {@link String#replace(CharSequence, CharSequence)}
+     * approach
+     * that could corrupt SQL when column expressions appear elsewhere (e.g., in
+     * subqueries).
+     */
+    private String buildPaginatedSql() {
+        selectColumns.add("count(*) OVER() AS _total");
+        try {
+            return toSql();
+        } finally {
+            // Always remove the injected column, even if toSql() throws
+            selectColumns.remove(selectColumns.size() - 1);
+        }
     }
 
     /**
@@ -703,7 +759,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      * Smart mapper: returns {@link RecordRowMapper} for records,
      * {@link BeanPropertyRowMapper} for regular classes.
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     protected static <R> RowMapper<R> smartMapper(Class<R> type) {
         if (type.isRecord()) {
             return (RowMapper<R>) RecordRowMapper.of((Class) type);
