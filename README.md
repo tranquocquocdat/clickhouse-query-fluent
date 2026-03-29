@@ -295,6 +295,33 @@ ClickHouseInsert.into("order_items")
 | 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.col("amount")` |
 | 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
 
+
+---
+
+## ⚡ Performance
+
+### Two-Tier Reflection Cache
+
+Auto DTO mapping (`.query(jdbc, MyDto.class)`) uses a **zero-overhead reflection model** when your DTO is a Java `record`:
+
+| Tier | Scope | What is cached |
+|---|---|---|
+| **`RecordMapperCache`** (app-scoped) | Entire app lifetime | `Constructor` + `RecordComponent[]` + component-index map — resolved **once per record class** via `ClassValue` |
+| **`rsMapping`** (query-scoped) | One query execution | ResultSet column → record component mapping — built **once on the first row**, reused for every subsequent row |
+
+```
+App lifecycle:
+  1st query(OrderDto.class)  → reflect once → cache in RecordMapperCache
+  2nd query(OrderDto.class)  → cache HIT → 0 reflection cost ✅
+  3rd query(OrderDto.class)  → cache HIT → 0 reflection cost ✅
+
+Within one query (10,000 rows):
+  row 0   → build rsMapping from ResultSet metadata (once)
+  row 1+  → reuse rsMapping ✅
+```
+
+> **`ClassValue` backing store** — the JVM manages weak references to `Class` objects automatically, so cache entries are reclaimed when a `ClassLoader` is unloaded (safe with Spring DevTools, Tomcat hot-deploy, OSGi).
+
 ---
 
 ## Installation
@@ -303,7 +330,7 @@ ClickHouseInsert.into("order_items")
 
 ```bash
 ./gradlew clean jar
-# → build/libs/clickhouse-query-builder-1.1.0.jar
+# → build/libs/clickhouse-query-builder-1.2.0.jar
 ```
 
 Copy JAR to your project's `app/libs/` folder:
@@ -314,7 +341,7 @@ repositories {
     flatDir { dirs 'libs' }
 }
 dependencies {
-    implementation name: 'clickhouse-query-builder-1.1.0'
+    implementation name: 'clickhouse-query-builder-1.2.0'
 }
 ```
 
@@ -326,7 +353,7 @@ dependencies {
 
 ```groovy
 repositories { mavenLocal() }
-dependencies { implementation 'lib.core:clickhouse-query-builder:1.1.0' }
+dependencies { implementation 'lib.core:clickhouse-query-builder:1.2.0' }
 ```
 
 **Requirements:** Java 21+ · Spring JDBC 6.x
@@ -1319,3 +1346,21 @@ ClickHouseQuery.select("user_id")
 | `.setEnum("name", enumVal)` | Enum → String |
 | `.setTimestamp("name", instant)` | Instant → Timestamp |
 | `.setArray("name", list, type)` | List → Array |
+
+---
+
+## Changelog
+
+### v1.2.0
+
+**Bug fixes**
+- `build.gradle`: fix duplicate `plugins {}` blocks (caused Gradle build failure)
+- `BaseQuery.queryPage()`: replace fragile `String.replace()` with `buildPaginatedSql()` using `try/finally` — correctly injects `count(*) OVER() AS _total` into the SELECT pipeline without risking SQL corruption on complex queries
+- `RecordRowMapper`: remove non-thread-safe `volatile` lazy-init pattern; field is now `final`
+
+**Performance**
+- `RecordMapperCache` (new): app-scoped `ClassValue`-backed cache for record class metadata — constructor + components resolved **once per class**, safe with ClassLoader reloading
+- `RecordRowMapper`: ResultSet column mapping (`rsMapping`) now cached after the first row — eliminates repeated `rs.getMetaData()` calls for large result sets (e.g. range scans returning 10k+ rows)
+
+### v1.1.0
+- Initial public release
