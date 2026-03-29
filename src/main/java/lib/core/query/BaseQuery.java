@@ -16,7 +16,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -755,7 +754,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
             }
         }
 
-        List<R> results = query(jdbc, type);
+        List<R> results = query(jdbc, smartMapper(type)); // raw path — no double-cache
         R result = results.isEmpty() ? null : results.get(0);
 
         if (cacheOptions != null && cacheKey != null && result != null) {

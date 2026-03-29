@@ -1,8 +1,8 @@
 package lib.core.clickhouse.query;
 
-
 import lib.core.clickhouse.expression.CH;
 import lib.core.clickhouse.query.builder.*;
+import lib.core.query.Alias;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,7 +13,6 @@ import java.util.List;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
-
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -217,9 +216,9 @@ class ClickHouseQueryTest {
         void whereNullMixed() {
             String sql = ClickHouseQuery
                     .select("*").from("t")
-                    .where("status").eq(null)        // skipped
-                    .where("amount").gt(100)          // applied
-                    .where("category").eq(null)       // skipped
+                    .where("status").eq(null) // skipped
+                    .where("amount").gt(100) // applied
+                    .where("category").eq(null) // skipped
                     .toSql();
 
             assertFalse(sql.contains("status"));
@@ -306,8 +305,7 @@ class ClickHouseQueryTest {
                     .select("*")
                     .from("orders")
                     .where("product_id").in(
-                            ClickHouseQuery.select("id").from("games").where("active").eq(1)
-                    )
+                            ClickHouseQuery.select("id").from("games").where("active").eq(1))
                     .toSql();
 
             assertTrue(sql.contains("product_id IN (SELECT id"));
@@ -322,8 +320,7 @@ class ClickHouseQueryTest {
                     .select("*")
                     .from("orders")
                     .where("user_id").notIn(
-                            ClickHouseQuery.select("id").from("banned_users").where("status").eq("BANNED")
-                    )
+                            ClickHouseQuery.select("id").from("banned_users").where("status").eq("BANNED"))
                     .toSql();
 
             assertTrue(sql.contains("user_id NOT IN (SELECT id"));
@@ -447,8 +444,7 @@ class ClickHouseQueryTest {
                     .from("t")
                     .whereOr(or -> or
                             .addEq("status", "ACTIVE")
-                            .addEq("status", "PENDING")
-                    );
+                            .addEq("status", "PENDING"));
 
             String sql = q.toSql();
             assertTrue(sql.contains("OR"));
@@ -466,8 +462,8 @@ class ClickHouseQueryTest {
                             .where("amount").gt(100)
                             .where("amount").gte(50)
                             .where("score").lt(10)
-                            .where("score").lte(5)
-                    ).toSql();
+                            .where("score").lte(5))
+                    .toSql();
 
             assertTrue(sql.contains("status = :_or0"));
             assertTrue(sql.contains("status != :_or1"));
@@ -485,8 +481,8 @@ class ClickHouseQueryTest {
                     .select("*").from("t")
                     .whereOr(or -> or
                             .where("status").in(List.of("ACTIVE", "PENDING"))
-                            .where("amount").gt(1000)
-                    ).toSql();
+                            .where("amount").gt(1000))
+                    .toSql();
 
             assertTrue(sql.contains("status IN (:_or0, :_or1)"));
             assertTrue(sql.contains("amount > :_or2"));
@@ -498,8 +494,8 @@ class ClickHouseQueryTest {
             String sql = ClickHouseQuery
                     .select("*").from("t")
                     .whereOr(or -> or
-                            .where("type").notIn(List.of("TEST", "DEMO"))
-                    ).toSql();
+                            .where("type").notIn(List.of("TEST", "DEMO")))
+                    .toSql();
 
             assertTrue(sql.contains("type NOT IN (:_or0, :_or1)"));
         }
@@ -511,8 +507,8 @@ class ClickHouseQueryTest {
                     .select("*").from("t")
                     .whereOr(or -> or
                             .where("deleted_at").isNull()
-                            .where("status").isNotNull()
-                    ).toSql();
+                            .where("status").isNotNull())
+                    .toSql();
 
             assertTrue(sql.contains("deleted_at IS NULL"));
             assertTrue(sql.contains("status IS NOT NULL"));
@@ -525,8 +521,8 @@ class ClickHouseQueryTest {
                     .select("*").from("t")
                     .whereOr(or -> or
                             .where("name").ilike("john")
-                            .where("email").like("gmail")
-                    ).toSql();
+                            .where("email").like("gmail"))
+                    .toSql();
 
             assertTrue(sql.contains("name ILIKE :_or0"));
             assertTrue(sql.contains("email LIKE :_or1"));
@@ -539,10 +535,9 @@ class ClickHouseQueryTest {
                     .select("*").from("orders")
                     .whereOr(or -> or
                             .where("user_id").in(
-                                ClickHouseQuery.select("id").from("vip_users")
-                            )
-                            .where("amount").gt(5000)
-                    ).toSql();
+                                    ClickHouseQuery.select("id").from("vip_users"))
+                            .where("amount").gt(5000))
+                    .toSql();
 
             assertTrue(sql.contains("user_id IN (SELECT id"));
             assertTrue(sql.contains("FROM vip_users)"));
@@ -555,8 +550,8 @@ class ClickHouseQueryTest {
             String sql = ClickHouseQuery
                     .select("*").from("t")
                     .whereOr(or -> or
-                            .where("status").eq(null)       // skipped
-                            .where("amount").gt(100)         // kept
+                            .where("status").eq(null) // skipped
+                            .where("amount").gt(100) // kept
                             .where("type").in((List<?>) null) // skipped
                     ).toSql();
 
@@ -572,8 +567,7 @@ class ClickHouseQueryTest {
                     .where("tenant_id").eq("op-1")
                     .whereOr(or -> or
                             .where("status").eq("ACTIVE")
-                            .where("status").eq("PENDING")
-                    )
+                            .where("status").eq("PENDING"))
                     .toSql();
 
             assertTrue(sql.contains("tenant_id = :tenantId"));
@@ -646,7 +640,7 @@ class ClickHouseQueryTest {
             q.havingRaw("c").lt(3);
             q.havingRaw("d").lte(4);
             q.havingRaw("e").between(5, 6);
-            
+
             String sql = q.toSql();
             assertTrue(sql.contains("HAVING a = :"));
             assertTrue(sql.contains("AND b != :"));
@@ -858,43 +852,37 @@ class ClickHouseQueryTest {
         @DisplayName("Correct order: SELECT → FROM → WHERE → GROUP_BY → ORDER_BY → LIMIT")
         void correctOrder() {
             // Should NOT throw
-            assertDoesNotThrow(() ->
-                ClickHouseQuery
+            assertDoesNotThrow(() -> ClickHouseQuery
                     .select("user_id")
                     .from("t")
                     .where("status").eq("ACTIVE")
                     .groupBy("user_id")
                     .orderBy("user_id", SortOrder.ASC)
                     .limit(10).offset(0)
-                    .toSql()
-            );
+                    .toSql());
         }
 
         @Test
         @DisplayName("Multiple WHERE calls allowed (same phase)")
         void multipleWheres() {
-            assertDoesNotThrow(() ->
-                ClickHouseQuery
+            assertDoesNotThrow(() -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .where("a").eq(1)
                     .where("b").eq(2)
                     .where("c").eqIfNotBlank("x")
                     .whereILike("kw").on("d")
-                    .toSql()
-            );
+                    .toSql());
         }
 
         @Test
         @DisplayName("WHERE after GROUP_BY throws IllegalStateException")
         void whereAfterGroupBy() {
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("user_id")
                     .from("t")
                     .groupBy("user_id")
-                    .where("status").eq("ACTIVE")
-            );
+                    .where("status").eq("ACTIVE"));
 
             assertTrue(ex.getMessage().contains("cannot call WHERE after GROUP_BY"));
         }
@@ -902,13 +890,11 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("FROM after WHERE throws IllegalStateException")
         void fromAfterWhere() {
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .where("a").eq(1)
-                    .from("t2")
-            );
+                    .from("t2"));
 
             assertTrue(ex.getMessage().contains("cannot call FROM after WHERE"));
         }
@@ -916,86 +902,72 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("WHERE after ORDER_BY throws IllegalStateException")
         void whereAfterOrderBy() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .orderBy("id", SortOrder.ASC)
-                    .where("status").eq("ACTIVE")
-            );
+                    .where("status").eq("ACTIVE"));
         }
 
         @Test
         @DisplayName("GROUP_BY after ORDER_BY throws IllegalStateException")
         void groupByAfterOrderBy() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .orderBy("id")
-                    .groupBy("user_id")
-            );
+                    .groupBy("user_id"));
         }
 
         @Test
         @DisplayName("HAVING after ORDER_BY throws IllegalStateException")
         void havingAfterOrderBy() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .groupBy("user_id")
                     .orderBy("user_id")
-                    .havingRaw("count(*)").gt(1)
-            );
+                    .havingRaw("count(*)").gt(1));
         }
 
         @Test
         @DisplayName("ORDER_BY after LIMIT throws IllegalStateException")
         void orderByAfterLimit() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .limit(10)
-                    .orderBy("id")
-            );
+                    .orderBy("id"));
         }
 
         @Test
         @DisplayName("JOIN after WHERE throws IllegalStateException")
         void joinAfterWhere() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .where("a").eq(1)
-                    .join("other o").on("o.id = t.oid")
-            );
+                    .join("other o").on("o.id = t.oid"));
         }
 
         @Test
         @DisplayName("Skipping phases is allowed (SELECT → FROM → ORDER_BY)")
         void skippingPhasesAllowed() {
-            assertDoesNotThrow(() ->
-                ClickHouseQuery
+            assertDoesNotThrow(() -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .orderBy("id")
-                    .toSql()
-            );
+                    .toSql());
         }
 
         @Test
         @DisplayName("Error message contains expected order")
         void errorMessageContainsExpectedOrder() {
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("t")
                     .groupBy("user_id")
-                    .where("x").eq(1)
-            );
+                    .where("x").eq(1));
 
             assertTrue(ex.getMessage().contains("SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT"));
         }
@@ -1004,108 +976,91 @@ class ClickHouseQueryTest {
         @DisplayName("Subquery in WHERE also validates phase order independently")
         void subQueryValidatesIndependently() {
             // Subquery is a separate ClickHouseQuery instance → has its own phase tracking
-            assertDoesNotThrow(() ->
-                ClickHouseQuery
+            assertDoesNotThrow(() -> ClickHouseQuery
                     .select("*")
                     .from("orders")
                     .where("product_id").in(
-                        ClickHouseQuery.select("id")
-                            .from("games")
-                            .where("active").eq(1)
-                            .groupBy("id")
-                    )
-                    .toSql()
-            );
+                            ClickHouseQuery.select("id")
+                                    .from("games")
+                                    .where("active").eq(1)
+                                    .groupBy("id"))
+                    .toSql());
         }
 
         @Test
         @DisplayName("Subquery with bad phase order throws IllegalStateException")
         void subQueryBadOrderThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("orders")
                     .where("product_id").in(
-                        ClickHouseQuery.select("id")
-                            .from("games")
-                            .groupBy("id")
-                            .where("active").eq(1)  // WHERE after GROUP_BY → ERROR in subquery!
-                    )
-            );
+                            ClickHouseQuery.select("id")
+                                    .from("games")
+                                    .groupBy("id")
+                                    .where("active").eq(1) // WHERE after GROUP_BY → ERROR in subquery!
+                    ));
         }
 
         @Test
         @DisplayName("count(subQuery) with bad order throws IllegalStateException")
         void countSubQueryBadOrderThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.count(
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.count(
                     ClickHouseQuery.select("user_id")
-                        .from("t")
-                        .orderBy("user_id")
-                        .where("status").eq("X")  // WHERE after ORDER_BY → ERROR!
-                )
-            );
+                            .from("t")
+                            .orderBy("user_id")
+                            .where("status").eq("X") // WHERE after ORDER_BY → ERROR!
+            ));
         }
 
         @Test
         @DisplayName("notIn(subQuery) with bad order throws IllegalStateException")
         void notInSubQueryBadOrderThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery
                     .select("*")
                     .from("orders")
                     .where("user_id").notIn(
-                        ClickHouseQuery.select("id")
-                            .from("banned_users")
-                            .limit(10)
-                            .where("active").eq(1)  // WHERE after LIMIT → ERROR!
-                    )
-            );
+                            ClickHouseQuery.select("id")
+                                    .from("banned_users")
+                                    .limit(10)
+                                    .where("active").eq(1) // WHERE after LIMIT → ERROR!
+                    ));
         }
 
         @Test
         @DisplayName("JOIN after GROUP_BY throws IllegalStateException")
         void joinAfterGroupByThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.select("*")
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.select("*")
                     .from("orders")
                     .groupBy("user_id")
-                    .join("users u").on("u.id", "orders.user_id")
-            );
+                    .join("users u").on("u.id", "orders.user_id"));
         }
 
         @Test
         @DisplayName("WHERE after HAVING throws IllegalStateException")
         void whereAfterHavingThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.select("user_id", "sum(amount) AS total")
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.select("user_id", "sum(amount) AS total")
                     .from("orders")
                     .groupBy("user_id")
                     .havingRaw("sum(amount)").gt(100)
-                    .where("status").eq("ACTIVE")
-            );
+                    .where("status").eq("ACTIVE"));
         }
 
         @Test
         @DisplayName("FROM(subQuery) after WHERE throws IllegalStateException")
         void fromSubQueryAfterWhereThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.select("*")
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.select("*")
                     .from("t")
                     .where("status").eq("X")
-                    .from(ClickHouseQuery.select("id").from("other")).as("sub")
-            );
+                    .from(ClickHouseQuery.select("id").from("other")).as("sub"));
         }
 
         @Test
         @DisplayName("groupBy after LIMIT throws IllegalStateException")
         void groupByAfterLimitThrows() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.select("*")
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.select("*")
                     .from("t")
                     .limit(10)
-                    .groupBy("user_id")
-            );
+                    .groupBy("user_id"));
         }
 
         @Test
@@ -1116,8 +1071,7 @@ class ClickHouseQueryTest {
                     .select("user_id", "amount").from("orders_2024")
                     .where("status").eq("ACTIVE")
                     .unionAll(
-                        ClickHouseQuery.select("user_id", "amount").from("orders_2025")
-                    )
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
                     .orderBy("amount", SortOrder.DESC)
                     .limit(10)
                     .toSql();
@@ -1130,28 +1084,24 @@ class ClickHouseQueryTest {
         @Test
         @DisplayName("CTE inner query validates phase order")
         void cteInnerQueryValidatesPhase() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.with("bad_cte",
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.with("bad_cte",
                     ClickHouseQuery.select("id")
-                        .from("users")
-                        .orderBy("id")
-                        .where("active").eq(1)  // WHERE after ORDER_BY → ERROR inside CTE!
-                ).select("*").from("bad_cte").toSql()
-            );
+                            .from("users")
+                            .orderBy("id")
+                            .where("active").eq(1) // WHERE after ORDER_BY → ERROR inside CTE!
+            ).select("*").from("bad_cte").toSql());
         }
 
         @Test
         @DisplayName("Subquery FROM inner query validates phase order")
         void subqueryFromInnerQueryValidatesPhase() {
-            assertThrows(IllegalStateException.class, () ->
-                ClickHouseQuery.select("*")
+            assertThrows(IllegalStateException.class, () -> ClickHouseQuery.select("*")
                     .from(
-                        ClickHouseQuery.select("id")
-                            .from("users")
-                            .limit(10)
-                            .where("active").eq(1)  // WHERE after LIMIT → ERROR inside subquery!
-                    ).as("sub").toSql()
-            );
+                            ClickHouseQuery.select("id")
+                                    .from("users")
+                                    .limit(10)
+                                    .where("active").eq(1) // WHERE after LIMIT → ERROR inside subquery!
+                    ).as("sub").toSql());
         }
 
         @Test
@@ -1208,8 +1158,7 @@ class ClickHouseQueryTest {
                     ClickHouseQuery.select("user_id", "order_id")
                             .from("order_items")
                             .where("status").eq("CLOSED")
-                            .groupBy("user_id", "order_id")
-            );
+                            .groupBy("user_id", "order_id"));
 
             String sql = countQuery.toSql();
             assertTrue(sql.startsWith("SELECT count(*) FROM ("));
@@ -1232,8 +1181,7 @@ class ClickHouseQueryTest {
                             .where("created_at").between(from, to)
                             .where("order_status").eqIfNotBlank("ACTIVE")
                             .whereILike("search").on("order_id", "user_id")
-                            .groupBy("user_id", "order_id", "order_status")
-            );
+                            .groupBy("user_id", "order_id", "order_status"));
 
             String sql = countQuery.toSql();
             assertTrue(sql.contains("SELECT count(*) FROM ("));
@@ -1452,8 +1400,7 @@ class ClickHouseQueryTest {
                             ClickHouseQuery.select("user_id", "sum(amount) AS total")
                                     .from("orders")
                                     .groupBy("user_id"),
-                            "sub"
-                    )
+                            "sub")
                     .toSql();
 
             assertTrue(sql.contains("FROM ("));
@@ -1473,8 +1420,7 @@ class ClickHouseQueryTest {
                                     .from("orders")
                                     .where("tenant_id").eq("op-1")
                                     .groupBy("user_id"),
-                            "sub"
-                    )
+                            "sub")
                     .where("total").gt(1000);
 
             String sql = q.toSql();
@@ -1495,8 +1441,7 @@ class ClickHouseQueryTest {
                             ClickHouseQuery.select("user_id", "count(*) AS cnt")
                                     .from("orders")
                                     .groupBy("user_id"),
-                            "ranked"
-                    )
+                            "ranked")
                     .orderBy("cnt", SortOrder.DESC)
                     .limit(10)
                     .toSql();
@@ -1520,8 +1465,7 @@ class ClickHouseQueryTest {
                     .select("user_id", "amount")
                     .from("orders_2024")
                     .unionAll(
-                            ClickHouseQuery.select("user_id", "amount").from("orders_2025")
-                    )
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
                     .toSql();
 
             assertTrue(sql.contains("FROM orders_2024"));
@@ -1548,8 +1492,7 @@ class ClickHouseQueryTest {
             String sql = ClickHouseQuery
                     .select("user_id", "amount").from("orders_2024")
                     .unionAll(
-                            ClickHouseQuery.select("user_id", "amount").from("orders_2025")
-                    )
+                            ClickHouseQuery.select("user_id", "amount").from("orders_2025"))
                     .orderBy("amount", SortOrder.DESC)
                     .limit(10)
                     .toSql();
@@ -1567,8 +1510,7 @@ class ClickHouseQueryTest {
                     .where("tenant_id").eq("op-1")
                     .unionAll(
                             ClickHouseQuery.select("user_id", "amount").from("orders_2025")
-                                    .where("status").eq("ACTIVE")
-                    );
+                                    .where("status").eq("ACTIVE"));
 
             q.toSql(); // trigger param merge
             assertEquals("op-1", q.toParams().getValue("tenantId"));
@@ -1711,11 +1653,10 @@ class ClickHouseQueryTest {
             Alias p = Alias.of("products").as("p");
 
             String sql = ClickHouseQuery.select(
-                        u.col("name"),
-                        o.sum("amount").as("total_revenue")
-                    )
-                    .from(o)                                        // FROM orders o
-                    .join(u).on(u.col("id"), o.col("user_id"))      // JOIN users u
+                    u.col("name"),
+                    o.sum("amount").as("total_revenue"))
+                    .from(o) // FROM orders o
+                    .join(u).on(u.col("id"), o.col("user_id")) // JOIN users u
                     .leftJoin(p).on(p.col("id"), o.col("product_id"))// LEFT JOIN products p
                     .where(o.col("tenant_id")).eq("op-1")
                     .where(o.col("status")).eq("ACTIVE")
@@ -1738,16 +1679,15 @@ class ClickHouseQueryTest {
             Alias users = Alias.of("users");
 
             String sql = ClickHouseQuery.select(
-                        users.col("name"),
-                        orders.sum("amount").as("total")
-                    )
+                    users.col("name"),
+                    orders.sum("amount").as("total"))
                     .from(orders)
                     .join(users).on(users.col("id"), orders.col("user_id"))
                     .where(orders.col("status")).eq("ACTIVE")
                     .toSql();
 
             assertTrue(sql.contains("FROM orders"));
-            assertFalse(sql.contains("FROM orders orders"));  // no duplicate
+            assertFalse(sql.contains("FROM orders orders")); // no duplicate
             assertTrue(sql.contains("JOIN users ON users.id = orders.user_id"));
             assertTrue(sql.contains("orders.status"));
         }
@@ -1964,8 +1904,7 @@ class ClickHouseQueryTest {
             String sql = ClickHouseQuery.select(
                     "user_id",
                     CH.caseWhen("amount").gt(0).then("WIN").orElse("LOSE").as("result"),
-                    CH.caseWhen("action").eq("BET").then(1).orElse(0).as("is_bet")
-            ).from("orders").toSql();
+                    CH.caseWhen("action").eq("BET").then(1).orElse(0).as("is_bet")).from("orders").toSql();
 
             assertTrue(sql.contains("CASE WHEN amount > 0 THEN 'WIN' ELSE 'LOSE' END AS result"));
             assertTrue(sql.contains("CASE WHEN action = 'BET' THEN 1 ELSE 0 END AS is_bet"));
@@ -2136,8 +2075,8 @@ class ClickHouseQueryTest {
                     .from("t")
                     .whereOr(or -> or
                             .where("created_at").between(from, to)
-                            .where("status").eq("ACTIVE")
-                    ).toSql();
+                            .where("status").eq("ACTIVE"))
+                    .toSql();
 
             assertTrue(sql.contains("created_at >= :_or0"));
             assertTrue(sql.contains("created_at <= :_or1"));
@@ -2152,8 +2091,8 @@ class ClickHouseQueryTest {
                     .from("t")
                     .whereOr(or -> or
                             .where("created_at").between(null, null)
-                            .where("status").eq("ACTIVE")
-                    ).toSql();
+                            .where("status").eq("ACTIVE"))
+                    .toSql();
 
             // null between is skipped, only status remains
             assertTrue(sql.contains("status = :_or0"));
