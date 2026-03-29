@@ -1330,17 +1330,23 @@ logging:
 
 ```log
 # Every query — DEBUG (log-sql: true)
-[LIST] 43ms  | cache=DISABLED | rows=31  | sql=SELECT date, sum(revenue) ...
+🔍  [CH] LIST  │ MISS     │  843ms │ rows=31
+   ├─ sql   : SELECT date, sum(revenue) FROM orders WHERE tenant_id = :t
+   └─ params: {tenantId=TENANT_001, fromDate=2026-01-01}
 
 # Cache HIT — INFO (metrics.enabled: true)
-[Cache HIT]  type=PAGE | 2ms   | rows=20
+✅  [CH] PAGE  │ HIT      │    2ms │ rows=20 │ page=0/20
 
 # Cache MISS — INFO (saved to Redis in background)
-[Cache MISS] type=PAGE | 843ms | rows=20 — saved to cache
+💾  [CH] LIST  │ MISS     │  843ms │ rows=31 — saved to cache (async)
 
 # Slow query — WARN (slow-query-ms threshold breached)
-[SLOW QUERY] 2341ms | type=LIST | cache=MISS | rows=10000 | sql=SELECT ...
-[SLOW QUERY params] {tenantId=TENANT_001, fromDate=2026-01-01T00:00:00Z}
+┌─── ⚠️  SLOW QUERY ───────────────────────────────────────────────────
+  type    : LIST            cache    : MISS
+  duration: 2341ms          rows     : 10000
+  sql     : SELECT date, sum(revenue) FROM orders WHERE ...
+  params  : {tenantId=TENANT_001, fromDate=2026-01-01T00:00:00Z}
+└──────────────────────────────────────────────────────────────────────
 ```
 
 ### Options Reference
