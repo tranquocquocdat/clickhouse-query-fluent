@@ -75,18 +75,28 @@ public final class RecordRowMapper<T extends Record> implements RowMapper<T> {
         return new RecordRowMapper<>(recordType);
     }
 
+    /**
+     * Cached mapping for the current query execution: component name → RS column
+     * index.
+     * Built once on the first row, reused for all subsequent rows of the same
+     * ResultSet.
+     * <p>
+     * Not thread-safe by design — Spring JDBC calls {@code mapRow()} sequentially
+     * in
+     * one thread per query, so no synchronization is needed.
+     */
+    private Map<String, Integer> rsMapping;
+
     @Override
     public T mapRow(ResultSet rs, int rowNum) throws SQLException {
-        // Build a per-query mapping: component name → ResultSet column index (1-based)
-        // This is done once per query execution (rowNum == 0) and reused for remaining
-        // rows.
-        // columnToResultSetIndex is local — no shared mutable state.
-        Map<String, Integer> colMap = buildResultSetMapping(rs);
+        if (rsMapping == null) {
+            rsMapping = buildResultSetMapping(rs);
+        }
 
         Object[] args = new Object[components.length];
         for (int i = 0; i < components.length; i++) {
             String componentName = components[i].getName();
-            Integer rsColIndex = colMap.get(componentName);
+            Integer rsColIndex = rsMapping.get(componentName);
             if (rsColIndex != null) {
                 args[i] = getValue(rs, rsColIndex, components[i].getType());
             }
@@ -103,11 +113,12 @@ public final class RecordRowMapper<T extends Record> implements RowMapper<T> {
     /**
      * Build a mapping from record component name → ResultSet column index
      * (1-based).
-     * Converts ResultSet column labels from snake_case to camelCase, then matches
-     * against the pre-built {@link #componentIndex} map.
+     * Called exactly once per query (on the first row) and cached in
+     * {@link #rsMapping}.
      * <p>
-     * This method is called once per {@link #mapRow} invocation but is stateless
-     * (no shared mutable field) — fully thread-safe.
+     * Converts ResultSet column labels from snake_case to camelCase, then matches
+     * against the pre-built {@link #componentIndex} (only matching columns are
+     * stored).
      */
     private Map<String, Integer> buildResultSetMapping(ResultSet rs) throws SQLException {
         var meta = rs.getMetaData();
