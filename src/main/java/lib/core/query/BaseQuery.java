@@ -3,6 +3,7 @@ package lib.core.query;
 import lib.core.query.builder.*;
 import lib.core.query.expression.CommonFunctions;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -751,6 +752,105 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         String countSql = "SELECT count(*) FROM (" + toSql() + ")";
         Long result = jdbc.queryForObject(countSql, params, Long.class);
         return result != null ? result : 0;
+    }
+
+    // ── Stream ───────────────────────────────────────────────────────────
+
+    /**
+     * Stream query results row-by-row to a callback.
+     * Each row is processed immediately as it arrives from the database —
+     * no intermediate {@link List} is created, memory usage is O(1).
+     *
+     * <p>
+     * Typical use: write directly to an HTTP {@code OutputStream} for CSV export.
+     *
+     * <pre>{@code
+     * // Spring MVC controller
+     * @GetMapping("/export")
+     * public void export(HttpServletResponse response) throws IOException {
+     *     response.setContentType("text/csv");
+     *     PrintWriter writer = response.getWriter();
+     *     writer.println("user_id,amount");
+     *
+     *     ClickHouseQuery.select("user_id", "amount")
+     *             .from("orders")
+     *             .where("tenant_id").eq(tenantId)
+     *             .stream(namedJdbc, rs -> {
+     *                 writer.println(rs.getString("user_id") + "," + rs.getLong("amount"));
+     *             });
+     * }
+     * }</pre>
+     *
+     * @param jdbc    the JDBC template
+     * @param handler callback invoked once per row
+     */
+    public void stream(NamedParameterJdbcTemplate jdbc, RowCallbackHandler handler) {
+        jdbc.query(toSql(), params, handler);
+    }
+
+    /**
+     * Stream query results in fixed-size batches to a consumer.
+     * Rows are accumulated into a {@link List} of {@code batchSize} and passed
+     * to {@code batchConsumer}. The last batch may be smaller than
+     * {@code batchSize}.
+     * Memory usage is O(batchSize), not O(total rows).
+     *
+     * <p>
+     * Typical use: send JSON chunks over SSE / chunked HTTP, or process in
+     * micro-batches.
+     *
+     * <pre>{@code
+     * // SSE — push 10 rows at a time to the browser
+     * @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+     * public SseEmitter streamData() {
+     *     SseEmitter emitter = new SseEmitter();
+     *     executor.submit(() -> {
+     *         ClickHouseQuery.select("user_id", "amount")
+     *                 .from("orders")
+     *                 .where("tenant_id").eq(tenantId)
+     *                 .streamBatch(namedJdbc, OrderDto.class, 10, batch -> {
+     *                     emitter.send(batch); // send List<OrderDto> as JSON array
+     *                 });
+     *         emitter.complete();
+     *     });
+     *     return emitter;
+     * }
+     * }
+     * // CSV export — flush every 100 rows
+     * query.streamBatch(namedJdbc, OrderDto.class, 100, batch -> {
+     *     batch.forEach(dto -> writer.println(dto.userId() + "," + dto.amount()));
+     *     writer.flush(); // flush chunk to client immediately
+     * });
+     * }</pre>
+     *
+     * @param jdbc          the JDBC template
+     * @param type          the DTO class or record for auto mapping
+     * @param batchSize     number of rows per batch (must be > 0)
+     * @param batchConsumer receives each batch; called once per full batch,
+     *                      and once more with the remaining rows at the end
+     * @param <R>           the row type
+     */
+    public <R> void streamBatch(NamedParameterJdbcTemplate jdbc, Class<R> type,
+            int batchSize, Consumer<List<R>> batchConsumer) {
+        if (batchSize <= 0)
+            throw new IllegalArgumentException("batchSize must be > 0");
+        RowMapper<R> mapper = smartMapper(type);
+        List<R> batch = new ArrayList<>(batchSize);
+
+        jdbc.query(toSql(), params, (rs, rowNum) -> {
+            R row = mapper.mapRow(rs, rowNum);
+            batch.add(row);
+            if (batch.size() == batchSize) {
+                batchConsumer.accept(new ArrayList<>(batch));
+                batch.clear();
+            }
+            return null;
+        });
+
+        // flush remaining rows (last partial batch)
+        if (!batch.isEmpty()) {
+            batchConsumer.accept(batch);
+        }
     }
 
     // ── Utilities ────────────────────────────────────────────────────────

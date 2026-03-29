@@ -800,6 +800,65 @@ page.hasPrevious();   // false (page 0)
 
 Internally uses `count(*) OVER()` window function — total count computed **before** LIMIT.
 
+### 18. Streaming — Large Export / SSE
+
+True row-by-row pipeline from ClickHouse → app → HTTP client. No intermediate `List`, memory usage is O(1) or O(batchSize).
+
+**`stream()` — CSV file download (memory O(1))**
+
+```java
+// Spring MVC controller
+@GetMapping("/export")
+public void exportCsv(HttpServletResponse response) throws IOException {
+    response.setContentType("text/csv");
+    response.setHeader("Content-Disposition", "attachment; filename=export.csv");
+    PrintWriter writer = response.getWriter();
+    writer.println("user_id,amount,created_at");   // CSV header
+
+    ClickHouseQuery.select("user_id", "amount", "created_at")
+        .from("orders")
+        .where("tenant_id").eq(tenantId)
+        .where("created_at").between(from, to)
+        .stream(namedJdbc, rs -> {
+            writer.println(
+                rs.getString("user_id") + "," +
+                rs.getBigDecimal("amount") + "," +
+                rs.getString("created_at")
+            );
+            // each row is flushed to the browser immediately via TCP
+        });
+}
+// FE: window.location.href = '/api/export?tenantId=...'
+```
+
+**`streamBatch()` — SSE / chunked JSON (memory O(batchSize))**
+
+```java
+// Push 10 rows at a time as JSON via Server-Sent Events
+@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter streamData() {
+    SseEmitter emitter = new SseEmitter();
+    executor.submit(() -> {
+        ClickHouseQuery.select("user_id", "amount")
+            .from("orders")
+            .where("tenant_id").eq(tenantId)
+            .streamBatch(namedJdbc, OrderDto.class, 10, batch -> {
+                emitter.send(batch);   // push List<OrderDto> as JSON to browser
+            });
+        emitter.complete();
+    });
+    return emitter;
+}
+
+// FE — receive batches in real-time
+const es = new EventSource('/api/stream');
+es.onmessage = (e) => renderRows(JSON.parse(e.data));
+```
+
+> **Memory model:**
+> - `stream()` — O(1): processes 1 row at a time, no buffer  
+> - `streamBatch(batchSize=10)` — O(10): only 10 rows in memory at a time, regardless of total result size
+
 ### 18. Auto DTO Mapping
 
 No `RowMapper` needed — just pass your DTO class:
