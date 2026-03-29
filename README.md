@@ -7,6 +7,48 @@ Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe
 
 ---
 
+## Table of Contents
+
+- [⚡ Best Practice — Real-World Example](#-best-practice--real-world-example)
+- [Features](#features)
+- [⚡ Performance](#-performance)
+- [Installation](#installation)
+- [Query Examples](#query-examples)
+  - [1. Basic SELECT](#1-basic-select)
+  - [2. Type-Safe Alias](#2-type-safe-alias)
+  - [3. Fluent JOIN](#3-fluent-join)
+  - [4. WHERE Operators](#4-where-operators)
+  - [5. Fluent OR Conditions (`whereOr`)](#5-fluent-or-conditions-whereor)
+  - [6. LIKE / ILIKE Search](#6-like--ilike-search)
+  - [7. Subquery (IN / NOT IN)](#7-subquery-in--not-in)
+  - [8. CASE WHEN](#8-case-when)
+  - [9. Fluent Arithmetic](#9-fluent-arithmetic-minus--plus)
+  - [10. Multi-Column `countDistinct`](#10-multi-column-countdistinct)
+  - [11. Expression Builder & Conditional Aggregates](#11-expression-builder--conditional-aggregates)
+  - [12. HAVING with Aggregates](#12-having-with-aggregates)
+  - [13. Subquery FROM](#13-subquery-from)
+  - [14. UNION ALL](#14-union-all)
+  - [15. WITH (CTE)](#15-with-cte--common-table-expressions)
+  - [16. Subquery Count](#16-subquery-count)
+  - [17. Single-Query Pagination (`queryPage`)](#17-single-query-pagination-querypage)
+  - [18. Streaming — Large Export / SSE](#18-streaming--large-export--sse)
+  - [19. Auto Caching (Redis / Caffeine)](#19-auto-caching-redis--caffeine)
+  - [20. Auto DTO Mapping](#20-auto-dto-mapping)
+  - [21. Default LIMIT (Safety Guard)](#21-default-limit-safety-guard)
+  - [22. Window Functions](#22-window-functions)
+  - [23. GROUP BY Modifiers](#23-group-by-modifiers)
+  - [24. INSERT](#24-insert)
+- [Validations & Safety](#validations--safety)
+- [Clause-Order Validation](#clause-order-validation)
+- [API Reference](#api-reference)
+  - [CH Expressions](#ch-expressions)
+  - [CASE WHEN Operators](#case-when-operators)
+  - [ClickHouseQuery Builder](#clickhousequery-select-builder)
+  - [CHParams](#chparams-insert-parameter-builder)
+- [Changelog](#changelog)
+
+---
+
 ## ⚡ Best Practice — Real-World Example
 
 > **Use case:** E-commerce analytics dashboard — covers **every** library feature in one coherent example.
@@ -998,7 +1040,7 @@ List<OrderReport> reports = ClickHouseQuery.select(
 | **Auto `class`** `.query(jdbc, Class)` | POJO with setters, `snake_case` → `camelCase` |
 | **Manual** `.query(jdbc, RowMapper)` | Cần transform, combine fields, hoặc tên không match |
 
-### 19. Default LIMIT (Safety Guard)
+### 21. Default LIMIT (Safety Guard)
 
 Auto `LIMIT 1000` when `.query()` is called without an explicit `.limit()`:
 
@@ -1017,7 +1059,7 @@ ClickHouseQuery.select("*").from("orders")
 
 > **Note:** `UNION ALL` queries are excluded. Default value: `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
 
-### 20. Window Functions
+### 22. Window Functions
 
 Window functions perform calculations across rows related to the current row within a partition.
 
@@ -1111,7 +1153,7 @@ ClickHouseQuery.select(
 | `avg(col).over()` | Running average | `avg("amount").over().partitionBy("user_id").orderBy("created_at")` |
 | `count().over()` | Running count | `count().over().partitionBy("user_id").orderBy("created_at")` |
 
-### 21. GROUP BY Modifiers
+### 23. GROUP BY Modifiers
 
 ClickHouse supports special GROUP BY modifiers for advanced aggregation.
 
@@ -1160,7 +1202,7 @@ ClickHouseQuery.select(
 // Returns: (region, product), (region, NULL), (NULL, product), (NULL, NULL)
 ```
 
-### 22. INSERT
+### 24. INSERT
 
 ```java
 ClickHouseInsert.into("orders")
