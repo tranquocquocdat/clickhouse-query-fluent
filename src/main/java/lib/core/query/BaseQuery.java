@@ -4,6 +4,9 @@ import lib.core.query.builder.*;
 import lib.core.query.cache.CacheOptions;
 import lib.core.query.cache.QueryCacheManager;
 import lib.core.query.expression.CommonFunctions;
+import lib.core.query.observe.CacheStatus;
+import lib.core.query.observe.QueryEvent;
+import lib.core.query.observe.QueryObserverRegistry;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
@@ -704,26 +707,37 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     @SuppressWarnings("unchecked")
     public <R> List<R> query(NamedParameterJdbcTemplate jdbc, Class<R> type) {
+        long start = System.currentTimeMillis();
         String cacheKey = null;
         if (cacheOptions != null) {
             cacheKey = generateCacheKey();
             try {
                 Object cachedData = cacheOptions.getManager().get(cacheKey, type, true);
                 if (cachedData != null) {
+                    QueryObserverRegistry.emit(new QueryEvent(
+                            toSql(), null, System.currentTimeMillis() - start,
+                            QueryEvent.QueryType.LIST, CacheStatus.HIT,
+                            ((List<?>) cachedData).size(), -1, -1));
                     return (List<R>) cachedData;
                 }
             } catch (Exception e) {
-                // Ignore cache read error, fallback to DB
+                // cache read error — fallback to DB
             }
         }
 
         List<R> results = query(jdbc, smartMapper(type));
+        long duration = System.currentTimeMillis() - start;
+
+        CacheStatus status = cacheOptions == null ? CacheStatus.DISABLED : CacheStatus.MISS;
+        QueryObserverRegistry.emit(new QueryEvent(
+                toSql(),
+                QueryObserverRegistry.get() != null ? params.getValues() : null,
+                duration, QueryEvent.QueryType.LIST, status, results.size(), -1, -1));
 
         if (cacheOptions != null && cacheKey != null) {
             final String finalKey = cacheKey;
             final List<R> finalResults = results;
             final CacheOptions opts = cacheOptions;
-            // async write — client gets result immediately, Redis save runs in background
             CompletableFuture.runAsync(() -> {
                 try {
                     opts.getManager().put(finalKey, finalResults, opts.getTtlSeconds());
@@ -744,31 +758,39 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      * @return the mapped DTO, or null if no result
      */
     public <R> R queryOne(NamedParameterJdbcTemplate jdbc, Class<R> type) {
-        if (this.limitVal == null) {
-            this.limitVal = 1; // Limit Guard for queryOne
-        }
-
+        if (this.limitVal == null)
+            this.limitVal = 1;
+        long start = System.currentTimeMillis();
         String cacheKey = null;
         if (cacheOptions != null) {
             cacheKey = generateCacheKey() + "_one";
             try {
                 Object cachedData = cacheOptions.getManager().get(cacheKey, type, false);
                 if (cachedData != null) {
+                    QueryObserverRegistry.emit(new QueryEvent(
+                            toSql(), null, System.currentTimeMillis() - start,
+                            QueryEvent.QueryType.ONE, CacheStatus.HIT, 1, -1, -1));
                     return (R) cachedData;
                 }
             } catch (Exception e) {
-                // Ignore cache read error
+                // cache read error — fallback to DB
             }
         }
 
-        List<R> results = query(jdbc, smartMapper(type)); // raw path — no double-cache
+        List<R> results = query(jdbc, smartMapper(type));
         R result = results.isEmpty() ? null : results.get(0);
+        long duration = System.currentTimeMillis() - start;
+
+        CacheStatus status = cacheOptions == null ? CacheStatus.DISABLED : CacheStatus.MISS;
+        QueryObserverRegistry.emit(new QueryEvent(
+                toSql(),
+                QueryObserverRegistry.get() != null ? params.getValues() : null,
+                duration, QueryEvent.QueryType.ONE, status, result == null ? 0 : 1, -1, -1));
 
         if (cacheOptions != null && cacheKey != null && result != null) {
             final String finalKey = cacheKey;
             final R finalResult = result;
             final CacheOptions opts = cacheOptions;
-            // async write — response not blocked by Redis save
             CompletableFuture.runAsync(() -> {
                 try {
                     opts.getManager().put(finalKey, finalResult, opts.getTtlSeconds());
@@ -849,26 +871,39 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     @SuppressWarnings("unchecked")
     public <R> Page<R> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, Class<R> type) {
+        long start = System.currentTimeMillis();
         String cacheKey = null;
         if (cacheOptions != null) {
             cacheKey = generateCacheKey() + "_page_" + page + "_" + pageSize;
             try {
                 Object cachedData = cacheOptions.getManager().get(cacheKey, Page.class, false);
                 if (cachedData != null) {
-                    return (Page<R>) cachedData;
+                    Page<R> hit = (Page<R>) cachedData;
+                    QueryObserverRegistry.emit(new QueryEvent(
+                            toSql(), null, System.currentTimeMillis() - start,
+                            QueryEvent.QueryType.PAGE, CacheStatus.HIT,
+                            hit.getData().size(), page, pageSize));
+                    return hit;
                 }
             } catch (Exception e) {
-                // Ignore cache read error
+                // cache read error — fallback to DB
             }
         }
 
         Page<R> resultPage = queryPage(page, pageSize, jdbc, smartMapper(type));
+        long duration = System.currentTimeMillis() - start;
+
+        CacheStatus status = cacheOptions == null ? CacheStatus.DISABLED : CacheStatus.MISS;
+        QueryObserverRegistry.emit(new QueryEvent(
+                toSql(),
+                QueryObserverRegistry.get() != null ? params.getValues() : null,
+                duration, QueryEvent.QueryType.PAGE, status,
+                resultPage.getData().size(), page, pageSize));
 
         if (cacheOptions != null && cacheKey != null) {
             final String finalKey = cacheKey;
             final Page<R> finalPage = resultPage;
             final CacheOptions opts = cacheOptions;
-            // async write — response not blocked by Redis save
             CompletableFuture.runAsync(() -> {
                 try {
                     opts.getManager().put(finalKey, finalPage, opts.getTtlSeconds());
