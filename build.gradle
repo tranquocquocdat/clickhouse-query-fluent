@@ -1,3 +1,10 @@
+buildscript {
+    repositories { mavenCentral() }
+    dependencies {
+        classpath 'com.guardsquare:proguard-gradle:7.6.1'
+    }
+}
+
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -11,7 +18,7 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
-    withSourcesJar()
+    // withSourcesJar() — disabled: do not distribute source code
     withJavadocJar()
 }
 
@@ -51,6 +58,24 @@ jar {
     }
 }
 
+// ── ProGuard obfuscation ──────────────────────────────────
+import proguard.gradle.ProGuardTask
+
+task proguard(type: ProGuardTask, dependsOn: jar) {
+    configuration 'proguard-rules.pro'
+
+    injars  "build/libs/${project.name}-${project.version}.jar"
+    outjars "build/libs/${project.name}-${project.version}-obfuscated.jar"
+
+    // JDK modules
+    libraryjars "${System.getProperty('java.home')}/jmods/java.base.jmod(!**.jar;!module-info.class)"
+    libraryjars "${System.getProperty('java.home')}/jmods/java.sql.jmod(!**.jar;!module-info.class)"
+    libraryjars "${System.getProperty('java.home')}/jmods/java.logging.jmod(!**.jar;!module-info.class)"
+
+    // Library dependencies
+    configurations.compileClasspath.each { libraryjars it }
+}
+
 publishing {
     publications {
         maven(MavenPublication) {
@@ -63,8 +88,8 @@ publishing {
 
                 licenses {
                     license {
-                        name = 'MIT License'
-                        url = 'https://opensource.org/licenses/MIT'
+                        name = 'Proprietary'
+                        url = 'https://github.com/tranquocquocdat/clickhouse-query-fluent/blob/master/LICENSE'
                     }
                 }
             }
