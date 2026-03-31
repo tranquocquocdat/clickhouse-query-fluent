@@ -12,7 +12,7 @@ public final class CaseConditionBuilder {
     private final CaseBuilder caseBuilder;
     private final String column;
 
-    CaseConditionBuilder(CaseBuilder caseBuilder, String column) {
+    public CaseConditionBuilder(CaseBuilder caseBuilder, String column) {
         this.caseBuilder = caseBuilder;
         this.column = column;
     }

@@ -1,8 +1,13 @@
 package lib.core.clickhouse.util;
 
+import lib.core.query.util.StringUtils;
+
 /**
  * String utilities for ClickHouse query building.
+ *
+ * @deprecated Use {@link StringUtils} instead (database-agnostic).
  */
+@Deprecated
 public final class CHStringUtils {
 
     private CHStringUtils() {}
@@ -10,21 +15,11 @@ public final class CHStringUtils {
     /**
      * Convert snake_case to camelCase.
      * Example: "user_id" → "userId", "created_at" → "createdAt"
+     *
+     * @deprecated Use {@link StringUtils#toCamelCase(String)} instead.
      */
+    @Deprecated
     public static String toCamelCase(String snake) {
-        if (snake == null || snake.isEmpty()) return snake;
-        StringBuilder sb = new StringBuilder();
-        boolean nextUpper = false;
-        for (char c : snake.toCharArray()) {
-            if (c == '_') {
-                nextUpper = true;
-            } else if (nextUpper) {
-                sb.append(Character.toUpperCase(c));
-                nextUpper = false;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
+        return StringUtils.toCamelCase(snake);
     }
 }

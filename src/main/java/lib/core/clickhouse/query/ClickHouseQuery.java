@@ -2,8 +2,7 @@ package lib.core.clickhouse.query;
 
 
 import lib.core.clickhouse.expression.CH;
-import lib.core.clickhouse.query.builder.*;
-import lib.core.clickhouse.util.CHStringUtils;
+import lib.core.query.util.StringUtils;
 import lib.core.query.BaseQuery;
 import lib.core.query.builder.CTEBuilder;
 import lib.core.query.builder.CountQuery;
@@ -334,6 +333,6 @@ public final class ClickHouseQuery extends BaseQuery<ClickHouseQuery> {
 
     /** Convert snake_case to camelCase for parameter naming. */
     public static String toCamelCase(String snake) {
-        return CHStringUtils.toCamelCase(snake);
+        return StringUtils.toCamelCase(snake);
     }
 }

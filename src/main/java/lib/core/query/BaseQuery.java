@@ -79,37 +79,37 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
 
     protected Phase currentPhase = Phase.SELECT;
 
-    // Protected fields — accessible to subclasses
-    protected final List<String> selectColumns = new ArrayList<>();
-    protected boolean distinct;
-    protected String tableName;
-    protected final List<String> joinClauses = new ArrayList<>();
-    protected final List<String> whereClauses = new ArrayList<>();
-    protected final MapSqlParameterSource params = new MapSqlParameterSource();
-    protected final List<String> groupByColumns = new ArrayList<>();
-    protected final List<String> havingClauses = new ArrayList<>();
-    protected final List<String> orderByClauses = new ArrayList<>();
-    protected Integer limitVal;
-    protected Long offsetVal;
+    // Public fields — accessible to builder classes in sub-packages
+    public final List<String> selectColumns = new ArrayList<>();
+    public boolean distinct;
+    public String tableName;
+    public final List<String> joinClauses = new ArrayList<>();
+    public final List<String> whereClauses = new ArrayList<>();
+    public final MapSqlParameterSource params = new MapSqlParameterSource();
+    public final List<String> groupByColumns = new ArrayList<>();
+    public final List<String> havingClauses = new ArrayList<>();
+    public final List<String> orderByClauses = new ArrayList<>();
+    public Integer limitVal;
+    public Long offsetVal;
 
     // Subquery FROM
-    protected BaseQuery<?> fromSubQuery;
-    String fromSubQueryAlias; // Package-private for SubQueryFromBuilder access
+    public BaseQuery<?> fromSubQuery;
+    public String fromSubQueryAlias;
 
     // UNION ALL
-    protected final List<BaseQuery<?>> unionQueries = new ArrayList<>();
+    public final List<BaseQuery<?>> unionQueries = new ArrayList<>();
 
     // WITH (CTE)
-    protected final List<String[]> cteList = new ArrayList<>();
+    public final List<String[]> cteList = new ArrayList<>();
 
     // Cache
     protected CacheOptions cacheOptions;
 
     /**
-     * Package-private constructor prevents external instantiation.
+     * Protected constructor for subclass instantiation.
      * Subclasses should provide their own factory methods.
      */
-    BaseQuery() {
+    protected BaseQuery() {
     }
 
     /**
@@ -120,7 +120,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
     protected void advanceTo(Phase target) {
         if (target.order < currentPhase.order) {
             throw new IllegalStateException(
-                    "Cannot call " + target.name()
+                    "cannot call " + target.name()
                             + " after " + currentPhase.name()
                             + ". Expected order: SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT");
         }

@@ -99,13 +99,13 @@ class CHTest {
     @Test
     @DisplayName("col() returns column name as-is")
     void col() {
-        assertEquals("user_id", CH.col("user_id"));
+        assertEquals(CH.col("user_id"), "user_id");
     }
 
     @Test
     @DisplayName("col(column, alias) generates column AS alias")
     void colWithAlias() {
-        assertEquals("user_id AS uid", CH.col("user_id", "uid"));
+        assertEquals(CH.col("user_id", "uid"), "user_id AS uid");
     }
 
     @Test
@@ -361,7 +361,6 @@ class CHTest {
         assertTrue(sql.contains("maxIf(amount, type = 'SALE') AS max_sale"));
         assertTrue(sql.contains("avgIf(score, status = 'DONE') AS avg_score"));
     }
-}
 
     // ── Window Functions ──────────────────────────────────────────────────
 
@@ -381,7 +380,7 @@ class CHTest {
     @DisplayName("rank().over().orderBy() without partition")
     void windowFunction_rank_noPartition() {
         var result = CH.rank().over()
-                .orderBy("amount", lib.core.clickhouse.query.SortOrder.DESC)
+                .orderBy("amount", lib.core.query.SortOrder.DESC)
                 .as("rank");
 
         assertEquals("rank() OVER(ORDER BY amount DESC) AS rank", result.toString());
@@ -392,7 +391,7 @@ class CHTest {
     void windowFunction_denseRank() {
         var result = CH.denseRank().over()
                 .partitionBy("game_id")
-                .orderBy("score", lib.core.clickhouse.query.SortOrder.DESC)
+                .orderBy("score", lib.core.query.SortOrder.DESC)
                 .as("dense_rank");
 
         assertEquals("dense_rank() OVER(PARTITION BY game_id ORDER BY score DESC) AS dense_rank",
@@ -474,7 +473,7 @@ class CHTest {
     @DisplayName("ntile(n) generates ntile window function")
     void windowFunction_ntile() {
         var result = CH.ntile(4).over()
-                .orderBy("amount", lib.core.clickhouse.query.SortOrder.DESC)
+                .orderBy("amount", lib.core.query.SortOrder.DESC)
                 .as("quartile");
 
         assertEquals("ntile(4) OVER(ORDER BY amount DESC) AS quartile", result.toString());
@@ -536,7 +535,7 @@ class CHTest {
                 CH.col("amount"),
                 CH.rowNumber().over()
                         .partitionBy("user_id")
-                        .orderBy("created_at", lib.core.clickhouse.query.SortOrder.DESC)
+                        .orderBy("created_at", lib.core.query.SortOrder.DESC)
                         .as("rank")
         ).from("orders").toSql();
 

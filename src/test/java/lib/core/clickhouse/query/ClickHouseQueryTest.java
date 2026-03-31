@@ -1,8 +1,10 @@
 package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.CH;
-import lib.core.clickhouse.query.builder.*;
+import lib.core.query.builder.*;
 import lib.core.query.Alias;
+import lib.core.query.SortOrder;
+import lib.core.query.Page;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -1124,8 +1126,8 @@ class ClickHouseQueryTest {
 
             assertTrue(sql.contains("JOIN users u"));
             assertTrue(sql.contains("LEFT JOIN products p"));
-            assertTrue(sql.contains("o.status = :o.status"));
-            assertTrue(sql.contains("o.amount > :o.amountGt"));
+            assertTrue(sql.contains("o.status = :status"));
+            assertTrue(sql.contains("o.amount > :amountGt"));
             assertTrue(sql.contains("ORDER BY o.amount DESC, o.created_at ASC"));
         }
 
@@ -1668,7 +1670,7 @@ class ClickHouseQueryTest {
             assertTrue(sql.contains("FROM orders o"));
             assertTrue(sql.contains("JOIN users u ON u.id = o.user_id"));
             assertTrue(sql.contains("LEFT JOIN products p ON p.id = o.product_id"));
-            assertTrue(sql.contains("o.tenant_id = :o.tenantId"));
+            assertTrue(sql.contains("o.tenant_id = :tenantId"));
             assertTrue(sql.contains("GROUP BY u.name"));
         }
 

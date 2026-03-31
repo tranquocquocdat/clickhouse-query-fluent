@@ -5,6 +5,7 @@ import lib.core.query.cursor.CursorField;
 import lib.core.query.cursor.CursorPage;
 import lib.core.query.cursor.CursorRequest;
 import lib.core.query.cursor.CursorToken;
+import lib.core.query.SortOrder;
 import org.junit.jupiter.api.*;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -137,10 +138,10 @@ class CursorPaginationTest {
             ClickHouseQuery.select("event_date", "id")
                     .from("events")
                     .where("tenant_id").eq("T001")
-                    .orderBy("event_date", "DESC")
+                    .orderBy("event_date", SortOrder.DESC)
                     .queryCursor(CursorRequest.firstPage(10), jdbc, mapper, row -> List.of(CursorField.of("id", row)));
 
-            verify(jdbc).query(argThat((String sql) -> sql.contains("WHERE tenant_id = :p0") &&
+            verify(jdbc).query(argThat((String sql) -> sql.contains("WHERE tenant_id = :tenantId") &&
                     !sql.contains("cursor_")), any(SqlParameterSource.class), any(RowMapper.class));
         }
 
@@ -155,7 +156,7 @@ class CursorPaginationTest {
 
             ClickHouseQuery.select("id", "revenue")
                     .from("events")
-                    .orderBy("id", "DESC")
+                    .orderBy("id", SortOrder.DESC)
                     .queryCursor(CursorRequest.nextPage(10, token), jdbc,
                             (rs, n) -> "row",
                             row -> List.of(CursorField.of("id", row)));
@@ -177,7 +178,7 @@ class CursorPaginationTest {
 
             ClickHouseQuery.select("event_date", "id")
                     .from("events")
-                    .orderBy("event_date", "DESC").orderBy("id", "DESC")
+                    .orderBy("event_date", SortOrder.DESC).orderBy("id", SortOrder.DESC)
                     .queryCursor(CursorRequest.nextPage(10, token), jdbc,
                             (rs, n) -> "row",
                             row -> List.of(

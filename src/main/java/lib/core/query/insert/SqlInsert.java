@@ -1,25 +1,26 @@
-package lib.core.clickhouse.insert;
+package lib.core.query.insert;
 
-import lib.core.query.insert.SqlInsert;
 import lib.core.query.util.StringUtils;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.function.Function;
 
 /**
- * Fluent INSERT builder for ClickHouse.
- *
- * @deprecated Use {@link SqlInsert} instead (database-agnostic).
+ * Fluent INSERT builder for SQL databases.
+ * Database-agnostic — works with any database via Spring JDBC.
  *
  * <p>
  * Usage:
  * 
  * <pre>{@code
- * ClickHouseInsert.into("wallet_transaction")
+ * SqlInsert.into("wallet_transaction")
  *         .columns("id", "user_id", "amount", "created_at")
- *         .executeBatch(namedJdbc, transactions, t -> CHParams.of()
+ *         .executeBatch(namedJdbc, transactions, t -> SqlParams.of()
  *                 .set("id", t.getId())
  *                 .set("userId", t.getUserId())
  *                 .set("amount", t.getAmount())
@@ -27,35 +28,49 @@ import java.util.function.Function;
  *                 .build());
  * }</pre>
  */
-@Deprecated
-public final class ClickHouseInsert {
+public final class SqlInsert {
 
-    private final SqlInsert delegate;
+    private String tableName;
+    private final List<String> columnNames = new ArrayList<>();
 
-    private ClickHouseInsert(SqlInsert delegate) {
-        this.delegate = delegate;
+    private SqlInsert() {
     }
 
     // ── Factory ──────────────────────────────────────────────────────────
 
     /** Start an INSERT statement for the given table. */
-    public static ClickHouseInsert into(String table) {
-        return new ClickHouseInsert(SqlInsert.into(table));
+    public static SqlInsert into(String table) {
+        SqlInsert insert = new SqlInsert();
+        insert.tableName = table;
+        return insert;
     }
 
     // ── Columns ──────────────────────────────────────────────────────────
 
     /** Define columns for the INSERT statement. */
-    public ClickHouseInsert columns(String... columns) {
-        delegate.columns(columns);
+    public SqlInsert columns(String... columns) {
+        this.columnNames.addAll(List.of(columns));
         return this;
     }
 
     // ── Build ────────────────────────────────────────────────────────────
 
-    /** Build the INSERT SQL. */
+    /**
+     * Build the INSERT SQL.
+     * Column names are used as-is for columns; camelCase versions are used as
+     * parameter names.
+     */
     public String toSql() {
-        return delegate.toSql();
+        StringJoiner colJoiner = new StringJoiner(", ");
+        StringJoiner valJoiner = new StringJoiner(", ");
+
+        for (String col : columnNames) {
+            colJoiner.add(col);
+            valJoiner.add(":" + StringUtils.toCamelCase(col));
+        }
+
+        return "INSERT INTO " + tableName +
+                " (" + colJoiner + ") VALUES (" + valJoiner + ")";
     }
 
     // ── Execute ──────────────────────────────────────────────────────────
@@ -63,24 +78,16 @@ public final class ClickHouseInsert {
     /** Execute a single insert. */
     public <T> void execute(NamedParameterJdbcTemplate jdbc, T entity,
             Function<T, MapSqlParameterSource> mapper) {
-        delegate.execute(jdbc, entity, mapper);
+        jdbc.update(toSql(), mapper.apply(entity));
     }
 
     /** Execute batch insert. */
     public <T> void executeBatch(NamedParameterJdbcTemplate jdbc, List<T> entities,
             Function<T, MapSqlParameterSource> mapper) {
-        delegate.executeBatch(jdbc, entities, mapper);
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────────
-
-    /**
-     * Convert snake_case column name to camelCase parameter name.
-     *
-     * @deprecated Use {@link StringUtils#toCamelCase(String)} instead.
-     */
-    @Deprecated
-    static String toCamelCase(String snakeCase) {
-        return StringUtils.toCamelCase(snakeCase);
+        String sql = toSql();
+        SqlParameterSource[] batchParams = entities.stream()
+                .map(mapper::apply)
+                .toArray(SqlParameterSource[]::new);
+        jdbc.batchUpdate(sql, batchParams);
     }
 }

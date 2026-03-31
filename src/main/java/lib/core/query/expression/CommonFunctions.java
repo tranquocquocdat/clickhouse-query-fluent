@@ -53,22 +53,22 @@ public class CommonFunctions {
          * Multiply this expression by another.
          */
         public Expr multiply(Expr other) {
-            return new Expr("(" + expression + " * " + other.expression + ")");
+            return new Expr("(" + expression + ") * (" + other.expression + ")");
         }
         
         public Expr multiply(String raw) {
-            return new Expr("(" + expression + " * " + raw + ")");
+            return new Expr("(" + expression + ") * (" + raw + ")");
         }
         
         /**
          * Divide this expression by another.
          */
         public Expr divide(Expr other) {
-            return new Expr("(" + expression + " / " + other.expression + ")");
+            return new Expr("(" + expression + ") / (" + other.expression + ")");
         }
         
         public Expr divide(String raw) {
-            return new Expr("(" + expression + " / " + raw + ")");
+            return new Expr("(" + expression + ") / (" + raw + ")");
         }
         
         /**
@@ -86,8 +86,9 @@ public class CommonFunctions {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof Expr)) return false;
-            return expression.equals(((Expr) obj).expression);
+            if (obj instanceof Expr) return expression.equals(((Expr) obj).expression);
+            if (obj instanceof String) return expression.equals(obj);
+            return false;
         }
         
         @Override
@@ -99,128 +100,128 @@ public class CommonFunctions {
     // Standard aggregates
     
     /**
-     * COUNT(*) aggregate function.
+     * count(*) aggregate function.
      */
     public static Expr count() {
-        return new Expr("COUNT(*)");
+        return new Expr("count(*)");
     }
     
     /**
-     * COUNT(column) aggregate function.
+     * count(column) aggregate function.
      */
     public static Expr count(String column) {
-        return new Expr("COUNT(" + column + ")");
+        return new Expr("count(" + column + ")");
     }
     
     /**
-     * COUNT(DISTINCT column) aggregate function (single column).
+     * countDistinct(column) aggregate function (single column).
      */
     public static Expr countDistinct(String column) {
-        return new Expr("COUNT(DISTINCT " + column + ")");
+        return new Expr("countDistinct(" + column + ")");
     }
     
     public static Expr countDistinct(Expr column) {
-        return new Expr("COUNT(DISTINCT " + column.expression + ")");
+        return new Expr("countDistinct(" + column.expression + ")");
     }
     
     /**
-     * SUM(column) aggregate function.
+     * sum(column) aggregate function.
      */
     public static Expr sum(String column) {
-        return new Expr("SUM(" + column + ")");
+        return new Expr("sum(" + column + ")");
     }
     
     /**
-     * MIN(column) aggregate function.
+     * min(column) aggregate function.
      */
     public static Expr min(String column) {
-        return new Expr("MIN(" + column + ")");
+        return new Expr("min(" + column + ")");
     }
     
     /**
-     * MAX(column) aggregate function.
+     * max(column) aggregate function.
      */
     public static Expr max(String column) {
-        return new Expr("MAX(" + column + ")");
+        return new Expr("max(" + column + ")");
     }
     
     /**
-     * AVG(column) aggregate function.
+     * avg(column) aggregate function.
      */
     public static Expr avg(String column) {
-        return new Expr("AVG(" + column + ")");
+        return new Expr("avg(" + column + ")");
     }
     
     // Window functions
     
     /**
-     * ROW_NUMBER() window function.
+     * row_number() window function.
      */
     public static Expr rowNumber() {
-        return new Expr("ROW_NUMBER()");
+        return new Expr("row_number()");
     }
     
     /**
-     * RANK() window function.
+     * rank() window function.
      */
     public static Expr rank() {
-        return new Expr("RANK()");
+        return new Expr("rank()");
     }
     
     /**
-     * DENSE_RANK() window function.
+     * dense_rank() window function.
      */
     public static Expr denseRank() {
-        return new Expr("DENSE_RANK()");
+        return new Expr("dense_rank()");
     }
     
     /**
-     * LAG(column) window function with default offset 1.
+     * lag(column, 1) window function with default offset 1.
      */
     public static Expr lag(String column) {
-        return new Expr("LAG(" + column + ")");
+        return new Expr("lag(" + column + ", 1)");
     }
     
     /**
-     * LAG(column, offset) window function.
+     * lag(column, offset) window function.
      */
     public static Expr lag(String column, int offset) {
-        return new Expr("LAG(" + column + ", " + offset + ")");
+        return new Expr("lag(" + column + ", " + offset + ")");
     }
     
     /**
-     * LEAD(column) window function with default offset 1.
+     * lead(column, 1) window function with default offset 1.
      */
     public static Expr lead(String column) {
-        return new Expr("LEAD(" + column + ")");
+        return new Expr("lead(" + column + ", 1)");
     }
     
     /**
-     * LEAD(column, offset) window function.
+     * lead(column, offset) window function.
      */
     public static Expr lead(String column, int offset) {
-        return new Expr("LEAD(" + column + ", " + offset + ")");
+        return new Expr("lead(" + column + ", " + offset + ")");
     }
     
     /**
-     * FIRST_VALUE(column) window function.
+     * first_value(column) window function.
      */
     public static Expr firstValue(String column) {
-        return new Expr("FIRST_VALUE(" + column + ")");
+        return new Expr("first_value(" + column + ")");
     }
     
     /**
-     * LAST_VALUE(column) window function.
+     * last_value(column) window function.
      */
     public static Expr lastValue(String column) {
-        return new Expr("LAST_VALUE(" + column + ")");
+        return new Expr("last_value(" + column + ")");
     }
     
     /**
-     * NTILE(n) window function.
+     * ntile(n) window function.
      */
     public static Expr ntile(int n) {
-        return new Expr("NTILE(" + n + ")");
+        return new Expr("ntile(" + n + ")");
     }
     
     // Column expressions
@@ -250,7 +251,7 @@ public class CommonFunctions {
      * Start building a CASE WHEN expression.
      */
     public static CaseConditionBuilder caseWhen(String column) {
-        return new CaseConditionBuilder(column);
+        return new CaseConditionBuilder(new CaseBuilder(), column);
     }
     
     /**

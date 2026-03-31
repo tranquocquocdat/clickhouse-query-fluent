@@ -12,7 +12,7 @@ package lib.core.query.expression;
 public final class CaseBuilder {
     final StringBuilder sql = new StringBuilder("CASE");
 
-    CaseBuilder() {}
+    public CaseBuilder() {}
 
     void addWhenThen(String condition, Object thenValue) {
         sql.append(" WHEN ").append(condition).append(" THEN ").append(CommonFunctions.renderValue(thenValue));

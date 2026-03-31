@@ -64,7 +64,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call FROM after WHERE"));
+        assertTrue(ex.getMessage().contains("cannot call FROM after WHERE"));
         assertTrue(ex.getMessage().contains("Expected order: SELECT → FROM → JOIN → WHERE → GROUP_BY → HAVING → ORDER_BY → LIMIT"));
     }
 
@@ -78,7 +78,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call FROM after JOIN"));
+        assertTrue(ex.getMessage().contains("cannot call FROM after JOIN"));
     }
 
     @Test
@@ -92,7 +92,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call WHERE after GROUP_BY"));
+        assertTrue(ex.getMessage().contains("cannot call WHERE after GROUP_BY"));
     }
 
     @Test
@@ -106,7 +106,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call GROUP_BY after HAVING"));
+        assertTrue(ex.getMessage().contains("cannot call GROUP_BY after HAVING"));
     }
 
     @Test
@@ -120,7 +120,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call GROUP_BY after ORDER_BY"));
+        assertTrue(ex.getMessage().contains("cannot call GROUP_BY after ORDER_BY"));
     }
 
     @Test
@@ -134,7 +134,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call ORDER_BY after LIMIT"));
+        assertTrue(ex.getMessage().contains("cannot call ORDER_BY after LIMIT"));
     }
 
     @Test
@@ -148,7 +148,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call FROM after WHERE"));
+        assertTrue(ex.getMessage().contains("cannot call FROM after WHERE"));
     }
 
     @Test
@@ -213,7 +213,7 @@ class PhaseOrderingTest {
                 .toSql();
         });
         
-        assertTrue(ex.getMessage().contains("Cannot call WHERE after HAVING"));
+        assertTrue(ex.getMessage().contains("cannot call WHERE after HAVING"));
     }
 
     @Test
