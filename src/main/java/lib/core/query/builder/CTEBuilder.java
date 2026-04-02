@@ -1,5 +1,6 @@
 package lib.core.query.builder;
 
+import lib.core.query.Alias;
 import lib.core.query.BaseQuery;
 
 import java.util.ArrayList;
@@ -63,6 +64,17 @@ public final class CTEBuilder<T extends BaseQuery<T>> {
     }
 
     /**
+     * Chain another CTE definition using an Alias.
+     *
+     * @param alias the Alias whose toString() provides the CTE name
+     * @param query the CTE query
+     * @return this builder for chaining
+     */
+    public CTEBuilder<T> with(Alias alias, BaseQuery<?> query) {
+        return with(alias.toString(), query);
+    }
+
+    /**
      * Start the main SELECT clause after defining CTEs.
      *
      * @param columns columns/expressions to select
@@ -70,11 +82,24 @@ public final class CTEBuilder<T extends BaseQuery<T>> {
      */
     public T select(String... columns) {
         T q = factory.select(columns);
-        q.cteList.addAll(ctes);
-        // Merge CTE params into main query
-        for (BaseQuery<?> cteQuery : cteQueries) {
-            cteQuery.params.getValues().forEach((k, v) -> q.params.addValue((String) k, v));
+        applyCTEs(q);
+        return q;
+    }
+
+    /**
+     * Start the main SELECT clause, accepting mixed types (String, Alias.col(), CH.Expr, etc.).
+     * Each argument is converted via toString().
+     *
+     * @param columns columns/expressions (any object with a meaningful toString)
+     * @return a new query with the CTEs attached
+     */
+    public T select(Object... columns) {
+        String[] cols = new String[columns.length];
+        for (int i = 0; i < columns.length; i++) {
+            cols[i] = columns[i].toString();
         }
+        T q = factory.select(cols);
+        applyCTEs(q);
         return q;
     }
 
@@ -86,10 +111,15 @@ public final class CTEBuilder<T extends BaseQuery<T>> {
      */
     public T selectDistinct(String... columns) {
         T q = factory.selectDistinct(columns);
+        applyCTEs(q);
+        return q;
+    }
+
+    /** Internal: attach CTE definitions and merge params into the main query. */
+    private void applyCTEs(T q) {
         q.cteList.addAll(ctes);
         for (BaseQuery<?> cteQuery : cteQueries) {
             cteQuery.params.getValues().forEach((k, v) -> q.params.addValue((String) k, v));
         }
-        return q;
     }
 }

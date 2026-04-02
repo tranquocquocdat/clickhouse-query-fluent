@@ -221,6 +221,26 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
         return query;
     }
 
+    /**
+     * ClickHouse String empty check: {@code column = ''}.
+     * Use instead of {@link #isNull()} for non-Nullable String columns,
+     * where LEFT JOIN misses produce '' instead of NULL.
+     */
+    public T isEmpty() {
+        query.whereClauses.add(column + " = ''");
+        return query;
+    }
+
+    /**
+     * ClickHouse String non-empty check: {@code column != ''}.
+     * Use instead of {@link #isNotNull()} for non-Nullable String columns,
+     * where LEFT JOIN misses produce '' instead of NULL.
+     */
+    public T isNotEmpty() {
+        query.whereClauses.add(column + " != ''");
+        return query;
+    }
+
     /** {@code column IN (subquery)} — raw SQL string. */
     public T inSubQuery(String subQuery) {
         query.whereClauses.add(column + " IN (" + subQuery + ")");

@@ -69,6 +69,22 @@ public final class CaseConditionBuilder {
     }
 
     /**
+     * ClickHouse String empty check: {@code column = ''}.
+     * Use instead of {@link #isNull()} for non-Nullable String columns.
+     */
+    public CaseThenBuilder isEmpty() {
+        return new CaseThenBuilder(caseBuilder, column + " = ''");
+    }
+
+    /**
+     * ClickHouse String non-empty check: {@code column != ''}.
+     * Use instead of {@link #isNotNull()} for non-Nullable String columns.
+     */
+    public CaseThenBuilder isNotEmpty() {
+        return new CaseThenBuilder(caseBuilder, column + " != ''");
+    }
+
+    /**
      * {@code column BETWEEN from AND to}.
      *
      * <pre>{@code

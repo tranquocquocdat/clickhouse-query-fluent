@@ -764,7 +764,7 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
      */
     public <R> R queryOne(NamedParameterJdbcTemplate jdbc, Class<R> type) {
         if (this.limitVal == null)
-            this.limitVal = 1;
+            limit(1);
         long start = System.currentTimeMillis();
         String cacheKey = null;
         if (cacheOptions != null) {

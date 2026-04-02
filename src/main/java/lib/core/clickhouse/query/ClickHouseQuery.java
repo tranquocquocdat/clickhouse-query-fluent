@@ -3,7 +3,9 @@ package lib.core.clickhouse.query;
 
 import lib.core.clickhouse.expression.CH;
 import lib.core.query.util.StringUtils;
+import lib.core.query.Alias;
 import lib.core.query.BaseQuery;
+import lib.core.query.Page;
 import lib.core.query.builder.CTEBuilder;
 import lib.core.query.builder.CountQuery;
 import org.slf4j.Logger;
@@ -12,6 +14,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.util.List;
+import java.util.StringJoiner;
 
 /**
  * Fluent SELECT query builder for ClickHouse with <b>clause-order validation</b>.
@@ -156,6 +159,17 @@ public final class ClickHouseQuery extends BaseQuery<ClickHouseQuery> {
         return builder;
     }
 
+    /**
+     * Start a CTE (WITH clause) using an Alias as the CTE name.
+     *
+     * @param alias the Alias whose toString() provides the CTE name
+     * @param query the CTE query
+     * @return a {@link CTEBuilder} for chaining more CTEs or starting SELECT
+     */
+    public static CTEBuilder<ClickHouseQuery> with(Alias alias, ClickHouseQuery query) {
+        return with(alias.toString(), query);
+    }
+
     // ── ClickHouse-specific GROUP BY methods ────────────────────────────
 
     // ── ClickHouse-specific GROUP BY methods ────────────────────────────
@@ -277,6 +291,12 @@ public final class ClickHouseQuery extends BaseQuery<ClickHouseQuery> {
         return jdbc.query(sql, params, rowMapper);
     }
 
+    @Override
+    public <R> Page<R> queryPage(int page, int pageSize, NamedParameterJdbcTemplate jdbc, RowMapper<R> rowMapper) {
+        logQuery(toSql());
+        return super.queryPage(page, pageSize, jdbc, rowMapper);
+    }
+
     // ── Static count factory ────────────────────────────────────────────
 
     /**
@@ -322,11 +342,31 @@ public final class ClickHouseQuery extends BaseQuery<ClickHouseQuery> {
      */
     private void logQuery(String sql) {
         if (log.isDebugEnabled()) {
-            log.debug("\n╔══ ClickHouse Query ══════════════════════════════════════\n{}\n╚═════════════════════════════════════════════════════════", sql);
+            String resolved = sql;
+            java.util.Map<String, Object> values = params.getValues();
+            // Sort by key length desc to avoid partial replacements (e.g. :id before :id_list)
+            java.util.List<String> keys = new java.util.ArrayList<>(values.keySet());
+            keys.sort((a, b) -> b.length() - a.length());
+            for (String key : keys) {
+                Object val = values.get(key);
+                resolved = resolved.replace(":" + key, formatValue(val));
+            }
+            log.debug("\n╔══ ClickHouse Query ══════════════════════════════════════\n{}\n╚═════════════════════════════════════════════════════════", resolved);
         }
-        if (log.isTraceEnabled()) {
-            log.trace("Query params: {}", params.getValues());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String formatValue(Object val) {
+        if (val == null) return "NULL";
+        if (val instanceof java.util.Collection) {
+            StringJoiner sj = new StringJoiner(", ", "(", ")");
+            for (Object item : (java.util.Collection<?>) val) {
+                sj.add(formatValue(item));
+            }
+            return sj.toString();
         }
+        if (val instanceof Number) return val.toString();
+        return "'" + val.toString().replace("'", "\\'") + "'";
     }
 
     // ── Utilities ────────────────────────────────────────────────────────
