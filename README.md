@@ -406,8 +406,12 @@ public SseEmitter streamDashboard() {
 | 19 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
 | 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.col("amount")` |
 | 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
-| 22 | **ClickHouse String** | `.isEmpty()` / `.isNotEmpty()` — correct `''` checks for non-Nullable String |
-| 23 | **Apply (custom logic)** | `.apply(q -> { ... })` — inject conditional logic without breaking chain |
+| 22 | **Window Functions** | `rowNumber()`, `rank()`, `lag()`, `lead()` + `.over().partitionBy().orderBy()` |
+| 23 | **GROUP BY modifiers** | `WITH TOTALS` / `WITH ROLLUP` / `WITH CUBE` |
+| 24 | **Streaming** | `.stream(handler)` O(1) / `.streamBatch(class, N, consumer)` O(N) |
+| 25 | **Auto Cache** | `.cached(manager, Duration)` — Redis/Caffeine, MD5 auto-key |
+| 26 | **ClickHouse String** | `.isEmpty()` / `.isNotEmpty()` — correct `''` checks for non-Nullable String |
+| 27 | **Apply (custom logic)** | `.apply(q -> { ... })` — inject conditional logic without breaking chain |
 
 
 ---
@@ -426,8 +430,8 @@ Auto DTO mapping (`.query(jdbc, MyDto.class)`) uses a **zero-overhead reflection
 ```
 App lifecycle:
   1st query(OrderDto.class)  → reflect once → cache in RecordMapperCache
-  2nd query(OrderDto.class)  → cache HIT → 0 reflection cost ✅
-  3rd query(OrderDto.class)  → cache HIT → 0 reflection cost ✅
+  2nd query(OrderDto.class)  → cache HIT → 0 reflection ✅
+  3rd query(OrderDto.class)  → cache HIT → 0 reflection ✅
 
 Within one query (10,000 rows):
   row 0   → build rsMapping from ResultSet metadata (once)
