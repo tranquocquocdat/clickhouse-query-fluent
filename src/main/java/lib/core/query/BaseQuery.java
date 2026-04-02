@@ -401,6 +401,30 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return self();
     }
 
+    // ── APPLY (custom logic) ────────────────────────────────────────────
+
+    /**
+     * Apply custom logic inline without breaking the fluent chain.
+     * Useful for conditional WHERE clauses, dynamic joins, or any
+     * logic that requires if/else branching.
+     *
+     * <pre>{@code
+     * query.where("user_id").in(userIds)
+     *      .apply(q -> {
+     *          if ("ENDED".equals(status))
+     *              q.where("es.session_id").isNotEmpty();
+     *      })
+     *      .groupBy("session_id")
+     * }</pre>
+     *
+     * @param customizer a consumer that receives this query for modification
+     * @return this query builder (for continued chaining)
+     */
+    public T apply(Consumer<T> customizer) {
+        customizer.accept(self());
+        return self();
+    }
+
     // ── GROUP BY ─────────────────────────────────────────────────────────
 
     /**

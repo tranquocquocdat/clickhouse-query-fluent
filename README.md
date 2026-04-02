@@ -22,22 +22,24 @@ Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe
   - [6. LIKE / ILIKE Search](#6-like--ilike-search)
   - [7. Subquery (IN / NOT IN)](#7-subquery-in--not-in)
   - [8. CASE WHEN](#8-case-when)
-  - [9. Fluent Arithmetic](#9-fluent-arithmetic-minus--plus)
-  - [10. Multi-Column `countDistinct`](#10-multi-column-countdistinct)
-  - [11. Expression Builder & Conditional Aggregates](#11-expression-builder--conditional-aggregates)
-  - [12. HAVING with Aggregates](#12-having-with-aggregates)
-  - [13. Subquery FROM](#13-subquery-from)
-  - [14. UNION ALL](#14-union-all)
-  - [15. WITH (CTE)](#15-with-cte--common-table-expressions)
-  - [16. Subquery Count](#16-subquery-count)
-  - [17. Single-Query Pagination (`queryPage`)](#17-single-query-pagination-querypage)
-  - [18. Streaming — Large Export / SSE](#18-streaming--large-export--sse)
-  - [19. Auto Caching (Redis / Caffeine)](#19-auto-caching-redis--caffeine)
-  - [20. Auto DTO Mapping](#20-auto-dto-mapping)
-  - [21. Default LIMIT (Safety Guard)](#21-default-limit-safety-guard)
-  - [22. Window Functions](#22-window-functions)
-  - [23. GROUP BY Modifiers](#23-group-by-modifiers)
-  - [24. INSERT](#24-insert)
+  - [9. ClickHouse String Type (`isEmpty` / `isNotEmpty`)](#9-clickhouse-string-type-isempty--isnotempty)
+  - [10. Fluent Custom Logic (`apply`)](#10-fluent-custom-logic-apply)
+  - [11. Fluent Arithmetic](#11-fluent-arithmetic-minus--plus)
+  - [12. Multi-Column `countDistinct`](#12-multi-column-countdistinct)
+  - [13. Expression Builder & Conditional Aggregates](#13-expression-builder--conditional-aggregates)
+  - [14. HAVING with Aggregates](#14-having-with-aggregates)
+  - [15. Subquery FROM](#15-subquery-from)
+  - [16. UNION ALL](#16-union-all)
+  - [17. WITH (CTE)](#17-with-cte--common-table-expressions)
+  - [18. Subquery Count](#18-subquery-count)
+  - [19. Single-Query Pagination (`queryPage`)](#19-single-query-pagination-querypage)
+  - [20. Streaming — Large Export / SSE](#20-streaming--large-export--sse)
+  - [21. Auto Caching (Redis / Caffeine)](#21-auto-caching-redis--caffeine)
+  - [22. Auto DTO Mapping](#22-auto-dto-mapping)
+  - [23. Default LIMIT (Safety Guard)](#23-default-limit-safety-guard)
+  - [24. Window Functions](#24-window-functions)
+  - [25. GROUP BY Modifiers](#25-group-by-modifiers)
+  - [26. INSERT](#26-insert)
 - [Validations & Safety](#validations--safety)
 - [Observability (Logging & Metrics)](#observability-logging--metrics)
 - [Clause-Order Validation](#clause-order-validation)
@@ -165,6 +167,8 @@ Page<SalesReport> report = ClickHouseQuery
     .where(oi.col("user_id")).notIn(blockedUsers)         // notIn(Collection)
     .where(oi.col("completed_at")).isNotNull()            // isNotNull
     .where(oi.col("error_code")).isNull()                 // isNull
+    .where(u.col("session_id")).isEmpty()                 // ClickHouse String = '' (LEFT JOIN miss)
+    .where(u.col("session_id")).isNotEmpty()              // ClickHouse String != ''
     .where(p.col("category")).eqIfNotBlank(categoryFilter)  // eqIfNotBlank
     .where(oi.col("is_sample")).eqIf(sampleOnly, 1)         // eqIf
     .where(u.col("id")).in(                               // in(subquery)
@@ -372,7 +376,7 @@ public SseEmitter streamDashboard() {
 }
 // FE: const es = new EventSource('/api/stream'); es.onmessage = e => render(JSON.parse(e.data));
 
-> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER/LEFT/RIGHT/FULL OUTER), every WHERE operator (eq/ne/gt/gte/lt/lte/in/notIn/isNull/isNotNull/between/eqIfNotBlank/eqIf/in(subquery)/notIn(subquery)/whereRaw/whereILike/whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators, thenRaw, orElseRaw, end), all 5 aggregates + 5 conditional aggregates (fluent & raw), arithmetic chain (minus/plus/multiply/divide), multi-column `countDistinct`, HAVING + `havingRaw`, multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage`/`queryOne`/terminal `.count()`/subquery count, INSERT batch (`set`/`setOrDefault`/`setIfNotNull`/`setEnum`/`setTimestamp`/`setArray`), **Auto Cache** `.cached(manager, Duration)`, **Streaming** `.stream(handler)` + `.streamBatch(type, batchSize, consumer)`.
+> **Every feature covered:** SELECT DISTINCT, type-safe `Alias`, CTE (`WITH`), all 4 JOINs (INNER/LEFT/RIGHT/FULL OUTER), every WHERE operator (eq/ne/gt/gte/lt/lte/in/notIn/isNull/isNotNull/**isEmpty/isNotEmpty**/between/eqIfNotBlank/eqIf/in(subquery)/notIn(subquery)/whereRaw/whereILike/whereLike.onPrefix), `whereOr` (all 13 operators), CASE WHEN (all operators incl. **isEmpty/isNotEmpty**, thenRaw, orElseRaw, end), **`apply()` custom logic injection**, all 5 aggregates + 5 conditional aggregates (fluent & raw), arithmetic chain (minus/plus/multiply/divide), multi-column `countDistinct`, HAVING + `havingRaw`, multi-column ORDER BY, UNION ALL, subquery FROM, `queryPage`/`queryOne`/terminal `.count()`/subquery count, INSERT batch (`set`/`setOrDefault`/`setIfNotNull`/`setEnum`/`setTimestamp`/`setArray`), **Auto Cache** `.cached(manager, Duration)`, **Streaming** `.stream(handler)` + `.streamBatch(type, batchSize, consumer)`.
 
 
 ---
@@ -402,6 +406,8 @@ public SseEmitter streamDashboard() {
 | 19 | **WITH (CTE)** | `ClickHouseQuery.with("name", subQuery).select(...)` |
 | 20 | **Type-safe Alias** | `Alias.of("orders")` → `.from(orders)` / `orders.col("amount")` |
 | 21 | **INSERT batch** | `ClickHouseInsert.into("t").columns(...).executeBatch(...)` |
+| 22 | **ClickHouse String** | `.isEmpty()` / `.isNotEmpty()` — correct `''` checks for non-Nullable String |
+| 23 | **Apply (custom logic)** | `.apply(q -> { ... })` — inject conditional logic without breaking chain |
 
 
 ---
@@ -587,6 +593,8 @@ ClickHouseQuery
 .where("category_id").notIn(excluded) // category_id NOT IN (...)
 .where("deleted_at").isNull()         // deleted_at IS NULL
 .where("error").isNotNull()           // error IS NOT NULL
+.where("session_id").isEmpty()        // session_id = '' (ClickHouse String)
+.where("session_id").isNotEmpty()     // session_id != '' (ClickHouse String)
 .where("created_at").between(from, to) // created_at >= :from AND created_at <= :to
 .where("status").eqIfNotBlank(status) // skipped if null/blank
 .where("role").eqIf(hasRole, role)    // skipped if condition false
@@ -722,7 +730,83 @@ caseWhen("role").eq("ADMIN").then("YES")
     .end().as("is_admin")
 ```
 
-### 9. Fluent Arithmetic (`minus` / `plus`)
+### 9. ClickHouse String Type (`isEmpty` / `isNotEmpty`)
+
+> [!IMPORTANT]
+> ClickHouse `String` columns are **non-Nullable** by default. `LEFT JOIN` misses produce `''` (empty string), **not** `NULL`. Using `isNull()` / `isNotNull()` on these columns is **always true/false** — a silent bug.
+
+**WHERE — filter by empty/non-empty String:**
+
+```java
+// ClickHouse String LEFT JOIN miss → '' not NULL
+.where(endSession.col("session_id")).isNotEmpty()   // session_id != ''
+.where(endSession.col("session_id")).isEmpty()      // session_id = ''
+
+// ❌ WRONG — always true for non-Nullable String!
+.where(endSession.col("session_id")).isNotNull()    // always true!
+.where(endSession.col("session_id")).isNull()       // always false!
+```
+
+**CASE WHEN — conditional value based on empty/non-empty:**
+
+```java
+// Derive status from LEFT JOIN result
+endSession.caseWhen("session_id")
+    .isNotEmpty()                 // session_id != '' → matched
+    .then("ENDED")
+    .orElse("PLAYING")            // session_id = '' → no match
+    .as("status")
+```
+
+**When to use:**
+
+| Scenario | Use | **Don't** use |
+|---|---|---|
+| Non-Nullable String column | `.isEmpty()` / `.isNotEmpty()` | `.isNull()` / `.isNotNull()` |
+| LEFT JOIN miss check | `.isEmpty()` | `.isNull()` |
+| Nullable(String) column | `.isNull()` / `.isNotNull()` | — |
+
+### 10. Fluent Custom Logic (`apply`)
+
+Inject conditional logic into the query chain **without breaking fluency**:
+
+```java
+return ClickHouseQuery.select(...)
+    .from(gameTransaction)
+    .join(walletTransaction).on(...)
+    .leftJoin(endSession).on(...)
+    .where(walletTransaction.col("operator_id")).in(operatorIds)
+    .apply(q -> applyStatusFilter(q, statuses))  // ← custom logic
+    .where(gameTransaction.col("round_date_time")).between(from, to)
+    .groupBy(...)
+    .queryPage(page, pageSize, namedJdbc, PlayerSessionItem.class);
+
+// Helper method — encapsulates complex if/else branching
+private static void applyStatusFilter(ClickHouseQuery query, List<String> statuses) {
+    if (statuses == null || statuses.size() != 1) return;
+    String status = statuses.get(0).toUpperCase();
+    if ("ENDED".equals(status)) {
+        query.where(endSession.col("session_id")).isNotEmpty();
+    } else if ("PLAYING".equals(status)) {
+        query.where(endSession.col("session_id")).isEmpty();
+    }
+}
+```
+
+**Signature:**
+
+```java
+public T apply(Consumer<T> customizer)
+```
+
+`apply()` passes the current query to a `Consumer`, then returns the same query — keeping the chain intact.
+
+**Use cases:**
+- Complex if/else conditional WHERE (like status filtering)
+- Reusable filter methods (e.g. `applyTenantFilter`, `applyDateRange`)
+- Extracting logic into helpers while keeping query as a single return statement
+
+### 11. Fluent Arithmetic (`minus` / `plus`)
 
 Chain arithmetic operations on any `Expr` returned by `sum()`, `col()`, `count()`, etc.:
 
@@ -744,7 +828,7 @@ oi.sum("debit").plus(oi.sum("credit")).as("total")
 // → sum(order_items.debit) + sum(order_items.credit) AS total
 ```
 
-### 10. Multi-Column `countDistinct`
+### 12. Multi-Column `countDistinct`
 
 Count distinct combinations of multiple columns:
 
@@ -757,7 +841,7 @@ countDistinct(oi.col("user_id"), oi.col("session_id")).as("total_sessions")
 // → count(DISTINCT (order_items.user_id, order_items.session_id)) AS total_sessions
 ```
 
-### 11. Expression Builder & Conditional Aggregates
+### 13. Expression Builder & Conditional Aggregates
 
 **Fluent (recommended):**
 
@@ -782,7 +866,7 @@ sumIfRaw("amount", "action = 'SALE'").as("total_sales")
 countIfRaw("user_id", in("tier", "GOLD", "PREMIUM")).as("premium_count")
 ```
 
-### 12. HAVING with Aggregates
+### 14. HAVING with Aggregates
 
 ```java
 ClickHouseQuery.select("user_id", sum("amount").as("total"))
@@ -794,7 +878,7 @@ ClickHouseQuery.select("user_id", sum("amount").as("total"))
     .query(namedJdbc, Report.class);
 ```
 
-### 13. Subquery FROM
+### 15. Subquery FROM
 
 ```java
 Alias sub    = Alias.of("sub");
@@ -815,7 +899,7 @@ ClickHouseQuery.select(sub.col("user_id"), sub.col("total"))
 // → SELECT sub.user_id, sub.total FROM (SELECT ... GROUP BY user_id) AS sub WHERE sub.total > ...
 ```
 
-### 14. UNION ALL
+### 16. UNION ALL
 
 ```java
 // Combine results from multiple tables
@@ -833,7 +917,7 @@ ClickHouseQuery.select("user_id", "amount").from("orders_2023")
     .query(namedJdbc, Report.class);
 ```
 
-### 15. WITH (CTE — Common Table Expressions)
+### 17. WITH (CTE — Common Table Expressions)
 
 ```java
 // Single CTE
@@ -866,7 +950,7 @@ ClickHouseQuery
     .query(namedJdbc, Report.class);
 ```
 
-### 16. Subquery Count
+### 18. Subquery Count
 
 ```java
 // Style 1 — Static count
@@ -888,7 +972,7 @@ long total = ClickHouseQuery
     .count(namedJdbc);
 ```
 
-### 17. Single-Query Pagination (`queryPage`)
+### 19. Single-Query Pagination (`queryPage`)
 
 Get paginated data **and total count in one query** — no extra `COUNT(*)` query:
 
@@ -908,7 +992,7 @@ page.hasPrevious();   // false (page 0)
 
 Internally uses `count(*) OVER()` window function — total count computed **before** LIMIT.
 
-### 18. Streaming — Large Export / SSE
+### 20. Streaming — Large Export / SSE
 
 True row-by-row pipeline from ClickHouse → app → HTTP client. No intermediate `List`, memory usage is O(1) or O(batchSize).
 
@@ -967,7 +1051,7 @@ es.onmessage = (e) => renderRows(JSON.parse(e.data));
 > - `stream()` — O(1): processes 1 row at a time, no buffer  
 > - `streamBatch(batchSize=10)` — O(10): only 10 rows in memory at a time, regardless of total result size
 
-### 19. Auto Caching (Redis / Caffeine)
+### 21. Auto Caching (Redis / Caffeine)
 
 ClickHouse queries can be heavy. To protect the database from concurrent dashboard reloads (cache stampede), you can enable **transparent caching** directly in the query builder.
 
@@ -1024,7 +1108,7 @@ public List<Report> getMonthlyRevenue(String tenantId) {
 
 > The `.cached(...)` modifier works transparently with `.query()`, `.queryOne()`, and `.queryPage()`.
 
-### 20. Auto DTO Mapping
+### 22. Auto DTO Mapping
 
 No `RowMapper` needed — just pass your DTO class:
 
@@ -1106,7 +1190,7 @@ List<OrderReport> reports = ClickHouseQuery.select(
 | **Auto `class`** `.query(jdbc, Class)` | POJO with setters, `snake_case` → `camelCase` |
 | **Manual** `.query(jdbc, RowMapper)` | Cần transform, combine fields, hoặc tên không match |
 
-### 21. Default LIMIT (Safety Guard)
+### 23. Default LIMIT (Safety Guard)
 
 Auto `LIMIT 1000` when `.query()` is called without an explicit `.limit()`:
 
@@ -1125,7 +1209,7 @@ ClickHouseQuery.select("*").from("orders")
 
 > **Note:** `UNION ALL` queries are excluded. Default value: `ClickHouseQuery.DEFAULT_LIMIT = 1000`.
 
-### 22. Window Functions
+### 24. Window Functions
 
 Window functions perform calculations across rows related to the current row within a partition.
 
@@ -1219,7 +1303,7 @@ ClickHouseQuery.select(
 | `avg(col).over()` | Running average | `avg("amount").over().partitionBy("user_id").orderBy("created_at")` |
 | `count().over()` | Running count | `count().over().partitionBy("user_id").orderBy("created_at")` |
 
-### 23. GROUP BY Modifiers
+### 25. GROUP BY Modifiers
 
 ClickHouse supports special GROUP BY modifiers for advanced aggregation.
 
@@ -1268,7 +1352,7 @@ ClickHouseQuery.select(
 // Returns: (region, product), (region, NULL), (NULL, product), (NULL, NULL)
 ```
 
-### 24. INSERT
+### 26. INSERT
 
 ```java
 ClickHouseInsert.into("orders")
@@ -1618,6 +1702,7 @@ ClickHouseQuery.select("user_id")
 | `.between(from, to)` | `WHEN col BETWEEN from AND to` |
 | `.in("v1", "v2")` | `WHEN col IN ('v1', 'v2')` |
 | `.isNull()` / `.isNotNull()` | `WHEN col IS NULL` / `IS NOT NULL` |
+| `.isEmpty()` / `.isNotEmpty()` | `WHEN col = ''` / `WHEN col != ''` — **ClickHouse String** |
 | `.then(val)` | `THEN 'val'` (String) / `THEN val` (Number) |
 | `.thenRaw("expr")` | `THEN expr` (unquoted) |
 | `.orElse(val)` / `.orElseRaw("expr")` | `ELSE ... END` |
@@ -1638,6 +1723,7 @@ ClickHouseQuery.select("user_id")
 | | `.where("col").in(list)` / `.notIn(list)` | IN / NOT IN |
 | | `.where("col").in(subQuery)` / `.notIn(subQuery)` | Subquery IN |
 | | `.where("col").isNull()` / `.isNotNull()` | NULL checks |
+| | `.where("col").isEmpty()` / `.isNotEmpty()` | ClickHouse String empty checks |
 | | `.where("col").between(from, to)` | Range |
 | | `.where("col").eqIfNotBlank(val)` | Conditional equality |
 | | `.where("col").eqIf(cond, val)` | Boolean-conditional |
@@ -1645,6 +1731,7 @@ ClickHouseQuery.select("user_id")
 | | `.whereLike(kw).on(...)` | LIKE search |
 | | `.whereOr(or -> or.where(...).eq(...))` | Fluent OR group |
 | | `.whereRaw("condition")` | Raw WHERE |
+| **Apply** | `.apply(q -> { ... })` | Inject custom logic inline |
 | **GROUP BY** | `.groupBy("col1", "col2")` | Group by columns |
 | | `.groupByWithTotals("col1", "col2")` | GROUP BY ... WITH TOTALS |
 | | `.groupByWithRollup("col1", "col2")` | GROUP BY ... WITH ROLLUP |
@@ -1675,6 +1762,11 @@ ClickHouseQuery.select("user_id")
 ## Changelog
 
 ### v1.2.0
+
+**New features**
+- `WhereBuilder.isEmpty()` / `.isNotEmpty()` — ClickHouse-specific String empty checks (`= ''` / `!= ''`). Use instead of `isNull()` / `isNotNull()` for non-Nullable String columns (e.g. LEFT JOIN misses)
+- `CaseConditionBuilder.isEmpty()` / `.isNotEmpty()` — same empty checks available in CASE WHEN expressions
+- `BaseQuery.apply(Consumer<T>)` — inject custom logic (e.g. conditional WHERE filters) without breaking the fluent chain. Enables single-return-statement queries with complex branching
 
 **Bug fixes**
 - `build.gradle`: fix duplicate `plugins {}` blocks (caused Gradle build failure)

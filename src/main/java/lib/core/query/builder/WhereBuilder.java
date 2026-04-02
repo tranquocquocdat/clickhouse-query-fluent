@@ -1,12 +1,12 @@
 package lib.core.query.builder;
 
-import lib.core.query.BaseQuery;
-import lib.core.query.exception.InvalidRangeException;
-import lib.core.clickhouse.util.ClickHouseDateUtil;
-
 import java.time.Instant;
 import java.util.Collection;
 import java.util.StringJoiner;
+
+import lib.core.clickhouse.util.ClickHouseDateUtil;
+import lib.core.query.BaseQuery;
+import lib.core.query.exception.InvalidRangeException;
 
 /**
  * Fluent builder for WHERE conditions on a specific column.
