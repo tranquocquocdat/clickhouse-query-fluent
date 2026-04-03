@@ -694,6 +694,46 @@ public abstract class BaseQuery<T extends BaseQuery<T>> {
         return cached(manager, ttl.getSeconds());
     }
 
+    /**
+     * Conditionally enable caching — only caches when {@code condition} is
+     * {@code true}.
+     *
+     * <p>
+     * Typical use: skip cache when the query's time range includes the current
+     * period (today, this month, etc.), because the data is still changing.
+     *
+     * <pre>{@code
+     * // Cache only if the date range does NOT include today
+     * .cachedIf(!isToday(toDate), manager, Duration.ofHours(1))
+     *
+     * // Cache only if querying completed months
+     * .cachedIf(toDate.isBefore(startOfThisMonth()), manager, Duration.ofDays(1))
+     * }</pre>
+     *
+     * @param condition when {@code true}, caching is enabled; when
+     *                  {@code false}, every call hits the database
+     * @param manager   the implementation connecting to Redis/Caffeine/etc.
+     * @param ttlSeconds time-to-live in seconds
+     */
+    @SuppressWarnings("unchecked")
+    public T cachedIf(boolean condition, QueryCacheManager manager, long ttlSeconds) {
+        if (condition) {
+            this.cacheOptions = new CacheOptions(manager, ttlSeconds);
+        }
+        return (T) this;
+    }
+
+    /**
+     * Conditionally enable caching with {@link Duration}.
+     *
+     * @param condition when {@code true}, caching is enabled
+     * @param manager   the implementation connecting to Redis/Caffeine/etc.
+     * @param ttl       time-to-live
+     */
+    public T cachedIf(boolean condition, QueryCacheManager manager, Duration ttl) {
+        return cachedIf(condition, manager, ttl.getSeconds());
+    }
+
     private String generateCacheKey() {
         String base = toSql() + "||" + params.getValues().toString();
         try {
