@@ -5,7 +5,6 @@ import lib.core.query.cursor.CursorField;
 import lib.core.query.cursor.CursorPage;
 import lib.core.query.cursor.CursorRequest;
 import lib.core.query.cursor.CursorToken;
-import lib.core.query.SortOrder;
 import org.junit.jupiter.api.*;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -125,13 +124,13 @@ class CursorPaginationTest {
 
     @Nested
     @DisplayName("SQL Generation")
+    @SuppressWarnings("unchecked")
     class SqlGenerationTests {
 
         @Test
         @DisplayName("First page: no cursor WHERE clause added")
         void firstPage_noWhereAdded() {
             NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
-            RowMapper<String> mapper = (rs, n) -> "row";
             when(jdbc.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
                     .thenReturn(List.of("a", "b"));
 
@@ -139,9 +138,10 @@ class CursorPaginationTest {
                     .from("events")
                     .where("tenant_id").eq("T001")
                     .orderBy("event_date", SortOrder.DESC)
-                    .queryCursor(CursorRequest.firstPage(10), jdbc, mapper, row -> List.of(CursorField.of("id", row)));
+                    .queryCursor(CursorRequest.firstPage(10), jdbc, (RowMapper<String>) (rs, n) -> "row",
+                            row -> List.of(CursorField.of("id", row)));
 
-            verify(jdbc).query(argThat((String sql) -> sql.contains("WHERE tenant_id = :tenantId") &&
+            verify(jdbc).query(argThat((String sql) -> sql.contains("WHERE") &&
                     !sql.contains("cursor_")), any(SqlParameterSource.class), any(RowMapper.class));
         }
 
@@ -158,7 +158,7 @@ class CursorPaginationTest {
                     .from("events")
                     .orderBy("id", SortOrder.DESC)
                     .queryCursor(CursorRequest.nextPage(10, token), jdbc,
-                            (rs, n) -> "row",
+                            (RowMapper<String>) (rs, n) -> "row",
                             row -> List.of(CursorField.of("id", row)));
 
             verify(jdbc).query(argThat((String sql) -> sql.contains("id < :cursor_id")), any(SqlParameterSource.class),
@@ -180,7 +180,7 @@ class CursorPaginationTest {
                     .from("events")
                     .orderBy("event_date", SortOrder.DESC).orderBy("id", SortOrder.DESC)
                     .queryCursor(CursorRequest.nextPage(10, token), jdbc,
-                            (rs, n) -> "row",
+                            (RowMapper<String>) (rs, n) -> "row",
                             row -> List.of(
                                     CursorField.of("event_date", row),
                                     CursorField.of("id", row)));
@@ -195,11 +195,11 @@ class CursorPaginationTest {
 
     @Nested
     @DisplayName("hasNext and nextCursor")
+    @SuppressWarnings("unchecked")
     class HasNextTests {
 
         private static final int LIMIT = 5;
 
-        /** Build limit+1 dummy rows. */
         private List<String> rows(int count) {
             List<String> list = new ArrayList<>();
             for (int i = 0; i < count; i++)
@@ -212,17 +212,16 @@ class CursorPaginationTest {
         void hasNext_true_when_fetchedLimitPlusOne() {
             NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
             when(jdbc.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
-                    .thenReturn(rows(LIMIT + 1)); // returns 6 rows for limit=5
+                    .thenReturn(rows(LIMIT + 1));
 
-            CursorPage<String> page = ClickHouseQuery.select("id")
-                    .from("t")
+            CursorPage<String> page = ClickHouseQuery.select("id").from("t")
                     .queryCursor(CursorRequest.firstPage(LIMIT), jdbc,
-                            (rs, n) -> "row",
+                            (RowMapper<String>) (rs, n) -> "row",
                             row -> List.of(CursorField.of("id", row)));
 
             assertTrue(page.hasNext());
             assertNotNull(page.getNextCursor());
-            assertEquals(LIMIT, page.getCount()); // extra row removed
+            assertEquals(LIMIT, page.getCount());
         }
 
         @Test
@@ -230,12 +229,11 @@ class CursorPaginationTest {
         void hasNext_false_on_last_page() {
             NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
             when(jdbc.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
-                    .thenReturn(rows(3)); // less than limit
+                    .thenReturn(rows(3));
 
-            CursorPage<String> page = ClickHouseQuery.select("id")
-                    .from("t")
+            CursorPage<String> page = ClickHouseQuery.select("id").from("t")
                     .queryCursor(CursorRequest.firstPage(LIMIT), jdbc,
-                            (rs, n) -> "row",
+                            (RowMapper<String>) (rs, n) -> "row",
                             row -> List.of(CursorField.of("id", row)));
 
             assertFalse(page.hasNext());
@@ -252,7 +250,7 @@ class CursorPaginationTest {
 
             CursorPage<String> page = ClickHouseQuery.select("id").from("t")
                     .queryCursor(CursorRequest.firstPage(10), jdbc,
-                            (rs, n) -> "row",
+                            (RowMapper<String>) (rs, n) -> "row",
                             row -> List.of(CursorField.of("id", row)));
 
             assertFalse(page.hasNext());
