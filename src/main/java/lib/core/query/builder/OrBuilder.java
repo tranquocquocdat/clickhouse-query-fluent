@@ -151,54 +151,60 @@ public final class OrBuilder<T extends BaseQuery<T>> {
             this.column = column;
         }
 
-        /** {@code column = value} — skipped when value is null. */
+        /** {@code column = value} — skipped when value is null or empty string. */
         public OrBuilder<T> eq(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " = :" + p);
             or.query.params.addValue(p, value);
             return or;
         }
 
-        /** {@code column != value} — skipped when value is null. */
+        /** {@code column != value} — skipped when value is null or empty string. */
         public OrBuilder<T> ne(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " != :" + p);
             or.query.params.addValue(p, value);
             return or;
         }
 
-        /** {@code column > value} — skipped when value is null. */
+        /** {@code column > value} — skipped when value is null or empty string. */
         public OrBuilder<T> gt(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " > :" + p);
             or.query.params.addValue(p, value);
             return or;
         }
 
-        /** {@code column >= value} — skipped when value is null. */
+        /** {@code column >= value} — skipped when value is null or empty string. */
         public OrBuilder<T> gte(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " >= :" + p);
             or.query.params.addValue(p, value);
             return or;
         }
 
-        /** {@code column < value} — skipped when value is null. */
+        /** {@code column < value} — skipped when value is null or empty string. */
         public OrBuilder<T> lt(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " < :" + p);
             or.query.params.addValue(p, value);
             return or;
         }
 
-        /** {@code column <= value} — skipped when value is null. */
+        /** {@code column <= value} — skipped when value is null or empty string. */
         public OrBuilder<T> lte(Object value) {
             if (value == null) return or;
+            if (value instanceof String && ((String) value).isEmpty()) return or;
             String p = or.nextParam();
             or.conditions.add(column + " <= :" + p);
             or.query.params.addValue(p, value);
