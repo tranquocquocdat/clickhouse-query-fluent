@@ -7,6 +7,8 @@ import java.util.StringJoiner;
 import lib.core.clickhouse.util.ClickHouseDateUtil;
 import lib.core.query.BaseQuery;
 import lib.core.query.exception.InvalidRangeException;
+import lib.core.query.util.ColumnValidator;
+import lib.core.query.util.ParameterNaming;
 
 /**
  * Fluent builder for WHERE conditions on a specific column.
@@ -20,14 +22,14 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
 
     public WhereBuilder(T query, String column) {
         this.query = query;
-        this.column = column;
+        this.column = ColumnValidator.validated(column);  // Validate on construction
     }
 
     /** {@code column = :param} — skipped when value is null or empty string. */
     public T eq(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column));
+        String paramName = ParameterNaming.generate(column);
         query.whereClauses.add(column + " = :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -36,7 +38,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     /** {@code column = :param} — applied only when value is not null and not blank. */
     public T eqIfNotBlank(String value) {
         if (value != null && !value.isBlank()) {
-            String paramName = toCamelCase(stripTablePrefix(column));
+            String paramName = ParameterNaming.generate(column);
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
@@ -46,7 +48,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     /** {@code column = :param} — applied only when condition is true. */
     public T eqIf(boolean condition, Object value) {
         if (condition) {
-            String paramName = toCamelCase(stripTablePrefix(column));
+            String paramName = ParameterNaming.generate(column);
             query.whereClauses.add(column + " = :" + paramName);
             query.params.addValue(paramName, value);
         }
@@ -57,7 +59,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     public T ne(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column)) + "Ne";
+        String paramName = ParameterNaming.generate(column, "Ne");
         query.whereClauses.add(column + " != :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -67,7 +69,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     public T gt(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column)) + "Gt";
+        String paramName = ParameterNaming.generate(column, "Gt");
         query.whereClauses.add(column + " > :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -77,7 +79,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     public T gte(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column)) + "Gte";
+        String paramName = ParameterNaming.generate(column, "Gte");
         query.whereClauses.add(column + " >= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -87,7 +89,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     public T lt(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column)) + "Lt";
+        String paramName = ParameterNaming.generate(column, "Lt");
         query.whereClauses.add(column + " < :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -97,7 +99,7 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
     public T lte(Object value) {
         if (value == null) return query;
         if (value instanceof String && ((String) value).isEmpty()) return query;
-        String paramName = toCamelCase(stripTablePrefix(column)) + "Lte";
+        String paramName = ParameterNaming.generate(column, "Lte");
         query.whereClauses.add(column + " <= :" + paramName);
         query.params.addValue(paramName, value);
         return query;
@@ -115,14 +117,13 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
             throw new InvalidRangeException(column, from, to);
         }
         
-        String base = toCamelCase(stripTablePrefix(column));
         if (from != null) {
-            String p = base + "From";
+            String p = ParameterNaming.generate(column, "From");
             query.whereClauses.add(column + " >= :" + p);
             query.params.addValue(p, ClickHouseDateUtil.format(from));
         }
         if (to != null) {
-            String p = base + "To";
+            String p = ParameterNaming.generate(column, "To");
             query.whereClauses.add(column + " <= :" + p);
             query.params.addValue(p, ClickHouseDateUtil.format(to));
         }
@@ -157,14 +158,13 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
             }
         }
         
-        String base = toCamelCase(stripTablePrefix(column));
         if (from != null && !(from instanceof String && ((String) from).isEmpty())) {
-            String p = base + "From";
+            String p = ParameterNaming.generate(column, "From");
             query.whereClauses.add(column + " >= :" + p);
             query.params.addValue(p, from);
         }
         if (to != null && !(to instanceof String && ((String) to).isEmpty())) {
-            String p = base + "To";
+            String p = ParameterNaming.generate(column, "To");
             query.whereClauses.add(column + " <= :" + p);
             query.params.addValue(p, to);
         }
@@ -177,14 +177,11 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
      */
     public <V> T in(Collection<V> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = toCamelCase(stripTablePrefix(column));
         StringJoiner joiner = new StringJoiner(", ");
-        int i = 0;
         for (V val : values) {
-            String pName = prefix + i;
+            String pName = ParameterNaming.generate(column);
             joiner.add(":" + pName);
             query.params.addValue(pName, val);
-            i++;
         }
         query.whereClauses.add(column + " IN (" + joiner + ")");
         return query;
@@ -196,14 +193,11 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
      */
     public <V> T notIn(Collection<V> values) {
         if (values == null || values.isEmpty()) return query;
-        String prefix = toCamelCase(stripTablePrefix(column)) + "Not";
         StringJoiner joiner = new StringJoiner(", ");
-        int i = 0;
         for (V val : values) {
-            String pName = prefix + i;
+            String pName = ParameterNaming.generate(column, "Not");
             joiner.add(":" + pName);
             query.params.addValue(pName, val);
-            i++;
         }
         query.whereClauses.add(column + " NOT IN (" + joiner + ")");
         return query;
@@ -265,31 +259,5 @@ public final class WhereBuilder<T extends BaseQuery<T>> {
         query.whereClauses.add(column + " NOT IN (" + subQuery.toSql() + ")");
         subQuery.params.getValues().forEach((k, v) -> query.params.addValue((String) k, v));
         return query;
-    }
-
-    /**
-     * Strip table prefix from column name for param naming.
-     * Example: "o.user_id" → "user_id", "user_id" → "user_id"
-     */
-    private String stripTablePrefix(String column) {
-        return column.contains(".") 
-            ? column.substring(column.lastIndexOf('.') + 1) 
-            : column;
-    }
-
-    /** Convert snake_case to camelCase for parameter naming. */
-    private static String toCamelCase(String snake) {
-        if (snake == null || snake.isEmpty()) return snake;
-        StringBuilder result = new StringBuilder();
-        boolean capitalizeNext = false;
-        for (char c : snake.toCharArray()) {
-            if (c == '_') {
-                capitalizeNext = true;
-            } else {
-                result.append(capitalizeNext ? Character.toUpperCase(c) : c);
-                capitalizeNext = false;
-            }
-        }
-        return result.toString();
     }
 }

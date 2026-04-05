@@ -246,9 +246,17 @@ public final class OrBuilder<T extends BaseQuery<T>> {
         /**
          * {@code column >= from AND column <= to} — skipped when both are null.
          * If only one bound is null, generates a one-sided condition.
+         * 
+         * @throws lib.core.query.exception.InvalidRangeException if from > to
          */
         public OrBuilder<T> between(java.time.Instant from, java.time.Instant to) {
             if (from == null && to == null) return or;
+            
+            // Validate range if both bounds are present
+            if (from != null && to != null && from.isAfter(to)) {
+                throw new lib.core.query.exception.InvalidRangeException(column, from, to);
+            }
+            
             if (from != null && to != null) {
                 String pFrom = or.nextParam();
                 String pTo = or.nextParam();
