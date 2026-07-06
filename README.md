@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # ClickHouse Query Builder
 
@@ -1868,4 +1868,4 @@ ClickHouseQuery.select("user_id")
 **Made with ❤️ for the ClickHouse + Java community**
 
 </div>
-]]>
+
