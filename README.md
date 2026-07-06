@@ -8,6 +8,10 @@
 
 **Fluent Java DSL for building type-safe ClickHouse queries with Spring `NamedParameterJdbcTemplate`.**
 
+> [!NOTE]
+> The source code for this project is maintained in a private repository at: [clickhouse-query-fluent-source](https://github.com/tranquocquocdat/clickhouse-query-fluent-source).
+> This repository serves as the public documentation and portfolio showcase.
+
 Zero code-gen · Zero config · Null-safe · Auto DTO mapping · Fully type-safe `Expr` column references.
 
 </div>
